@@ -1,0 +1,14 @@
+{
+  "name": "linguakit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension for instant AI-powered translation on input field.",
+  "scripts": {
+    "lint": "oxlint .",
+    "format": "oxfmt . --write"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.48.0",
+    "oxlint": "^1.63.0"
+  }
+}

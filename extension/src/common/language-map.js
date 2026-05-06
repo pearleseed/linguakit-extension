@@ -1,0 +1,60 @@
+export const languageSynonymsToBcp47 = {
+  english: "en",
+  ingles: "en",
+  inglês: "en",
+  japanese: "ja",
+  japones: "ja",
+  japonês: "ja",
+  japan: "ja",
+  vietnamese: "vi",
+  vietnamita: "vi",
+  vietnam: "vi",
+  chinese: "zh",
+  chines: "zh",
+  chinês: "zh",
+  "chinese simplified": "zh-CN",
+  "chinese traditional": "zh-TW",
+  korean: "ko",
+  coreano: "ko",
+  spanish: "es",
+  espanol: "es",
+  espanhol: "es",
+  french: "fr",
+  frances: "fr",
+  francés: "fr",
+  german: "de",
+  alemao: "de",
+  alemão: "de",
+  russian: "ru",
+  russo: "ru",
+  portuguese: "pt",
+  portugues: "pt",
+  português: "pt",
+  italian: "it",
+  italiano: "it",
+  hindi: "hi",
+  híndi: "hi",
+  arabic: "ar",
+  arabe: "ar",
+  árabe: "ar",
+  turkish: "tr",
+  turco: "tr",
+  dutch: "nl",
+  neerlandes: "nl",
+  neerlandês: "nl",
+  polish: "pl",
+  polones: "pl",
+  polonês: "pl",
+  thai: "th",
+  tailandes: "th",
+  tailandês: "th",
+};
+
+export function normalizeLanguageToCode(input) {
+  if (!input) return null;
+  const key = String(input).trim().toLowerCase();
+  return (
+    languageSynonymsToBcp47[key] ||
+    (/^[a-z]{2,3}(-[a-z0-9-]+)?$/i.test(key.replace(/_/g, "-")) ? key.replace(/_/g, "-") : null)
+  );
+}

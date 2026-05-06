@@ -1,0 +1,9 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "warn",
+    "perf": "warn",
+    "suspicious": "warn"
+  },
+  "ignorePatterns": ["node_modules", "dist", "extension/src/common/tesseract", ".git", ".cursor"]
+}
