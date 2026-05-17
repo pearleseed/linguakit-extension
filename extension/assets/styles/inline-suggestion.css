@@ -3,8 +3,7 @@
 /* Inline Suggestion */
 .bt-inline-suggestion {
   all: initial;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(4px);
+  background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   box-shadow:

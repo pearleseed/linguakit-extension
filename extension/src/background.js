@@ -1,56 +1,11 @@
 import { AIProviderService } from "./services/ai-providers.js";
-import { locales } from "./common/locales.js";
 import { htmlToMarkdown, markdownToHtml, shouldConvertFormat } from "./services/format-utils.js";
 
 const OFFSCREEN_URL = chrome.runtime.getURL("../pages/offscreen.html");
 const SETTINGS_KEY = "translatorSettings";
-
-function t(settings, key) {
-  const language = settings?.interfaceLanguage || "en";
-  return locales[language]?.[key] || locales.en[key] || key;
-}
-
-async function sendTabMessage(tabId, message, label = message?.type) {
-  try {
-    return await chrome.tabs.sendMessage(tabId, message);
-  } catch (err) {
-    const reason = String(err?.message || err);
-    console.warn(`LinguaKit: ${label || "tab message"} failed for tab ${tabId}: ${reason}`);
-    return { ok: false, error: reason };
-  }
-}
-
-async function sendToast(tabId, settings, key, type = "default") {
-  return sendTabMessage(
-    tabId,
-    {
-      type: "show-toast",
-      payload: { message: t(settings, key), type },
-    },
-    `show-toast:${key}`,
-  );
-}
-
-async function sendCaptureStatus(tabId, settings, state, key, extra = {}) {
-  return sendTabMessage(
-    tabId,
-    {
-      type: "capture-status",
-      payload: {
-        state,
-        message: t(settings, key),
-        ...extra,
-      },
-    },
-    `capture-status:${state}`,
-  );
-}
-
 async function ensureOffscreen() {
   const contexts = await chrome.runtime.getContexts({});
-  const hasOffscreen = contexts.some(
-    (c) => c.contextType === "OFFSCREEN_DOCUMENT" && c.documentUrl === OFFSCREEN_URL,
-  );
+  const hasOffscreen = contexts.some((c) => c.contextType === "OFFSCREEN_DOCUMENT" && c.documentUrl === OFFSCREEN_URL);
 
   if (!hasOffscreen) {
     await chrome.offscreen.createDocument({
@@ -113,6 +68,15 @@ async function readSettings() {
       hoverModifierKey: "ctrl", // "ctrl", "shift", "alt"
       hoverToggleShortcut: {
         key: "O",
+        ctrl: true,
+        shift: true,
+        alt: false,
+      },
+      // Auto Page Translate settings
+      autoPageTranslateEnabled: false,
+      autoPageTranslateDomains: [],
+      autoTranslateToggleShortcut: {
+        key: "P",
         ctrl: true,
         shift: true,
         alt: false,
@@ -242,6 +206,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.runtime.openOptionsPage();
     return true;
   }
+  if (message?.type === "get-page-cache") {
+    const { domain, targetLang } = message.payload;
+    const key = `page_cache_${domain}_${targetLang}`;
+    chrome.storage.local.get(key, (data) => {
+      sendResponse({ ok: true, cache: data[key] || null });
+    });
+    return true;
+  }
+
+  if (message?.type === "set-page-cache") {
+    const { domain, targetLang, cache } = message.payload;
+    const key = `page_cache_${domain}_${targetLang}`;
+    chrome.storage.local.set({ [key]: cache }, () => {
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
   if (message?.type === "tts-play") {
     ensureOffscreen().then(async () => {
       try {
@@ -257,155 +239,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-/*
-  if (message?.type === "capture-coordinates") {
-    const { rect } = message.payload;
-    const targetTabId = sender.tab?.id;
-
-    if (!targetTabId) {
-      sendResponse({ ok: false, error: "No target tab found" });
-      return true;
-    }
-
-    readSettings().then(async (settings) => {
-      await sendCaptureStatus(targetTabId, settings, "processing", "capture.processingOcr");
-      await sendToast(targetTabId, settings, "capture.processingOcr");
-
-      chrome.tabs.captureVisibleTab(null, { format: "png" }, (dataUrl) => {
-        if (chrome.runtime.lastError) {
-          console.error("Capture failed:", chrome.runtime.lastError);
-          sendCaptureStatus(targetTabId, settings, "error", "capture.captureFailed");
-          sendToast(targetTabId, settings, "capture.captureFailed", "warning");
-          sendResponse({ ok: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-
-        ensureOffscreen().then(async () => {
-          try {
-            const response = await chrome.runtime.sendMessage({
-              type: "perform-ocr",
-              payload: { dataUrl, rect, targetTabId },
-            });
-
-            if (response?.ok) {
-              const text = String(response.text || "").trim();
-              if (!text) {
-                await sendCaptureStatus(targetTabId, settings, "empty", "capture.noTextFound");
-                await sendToast(targetTabId, settings, "capture.noTextFound", "warning");
-                sendResponse({ ok: true, text: "" });
-                return;
-              }
-
-              const popupResponse = await sendTabMessage(
-                targetTabId,
-                {
-                  type: "ocr-success",
-                  payload: {
-                    text,
-                    rect,
-                  },
-                },
-                "ocr-success",
-              );
-
-              if (popupResponse?.ok === false) {
-                await sendCaptureStatus(targetTabId, settings, "error", "capture.popupFailed", {
-                  error: popupResponse.error,
-                });
-                await sendToast(targetTabId, settings, "capture.popupFailed", "warning");
-                sendResponse({ ok: false, error: popupResponse.error });
-                return;
-              }
-
-              await sendCaptureStatus(targetTabId, settings, "success", "capture.ocrComplete");
-              sendResponse({ ok: true, text });
-            } else {
-              console.error("OCR response error:", response?.error);
-              await sendCaptureStatus(targetTabId, settings, "error", "capture.ocrFailed", {
-                error: response?.error,
-              });
-              await sendToast(targetTabId, settings, "capture.ocrFailed", "warning");
-              sendResponse({ ok: false, error: response?.error || "OCR failed" });
-            }
-          } catch (err) {
-            console.error("OCR failed:", err);
-            await sendCaptureStatus(targetTabId, settings, "error", "capture.ocrFailed", {
-              error: String(err?.message || err),
-            });
-            await sendToast(targetTabId, settings, "capture.ocrFailed", "warning");
-            sendResponse({ ok: false, error: String(err?.message || err) });
-          }
-        });
-      });
-    });
-    return true;
-  }
-
-  if (message?.type === "ocr-progress") {
-    const { targetTabId, progress, status } = message.payload || {};
-    if (targetTabId) {
-      readSettings().then((settings) => {
-        sendCaptureStatus(targetTabId, settings, "processing", "capture.processingOcr", {
-          progress,
-          detail: status,
-        });
-      });
-    }
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (message?.type === "capture-cancelled") {
-    const targetTabId = sender.tab?.id;
-    if (targetTabId) {
-      readSettings().then((settings) =>
-        sendToast(targetTabId, settings, "capture.cancelled", "warning"),
-      );
-    }
-    sendResponse({ ok: true });
-    return true;
-  }
-*/
+  return false;
 });
-
-/*
-chrome.commands.onCommand.addListener((command) => {
-  if (command === "capture-screen") {
-    chrome.tabs.query({ active: true, currentWindow: true }, async ([tab]) => {
-      if (tab?.id) {
-        const settings = await readSettings();
-        const response = await sendTabMessage(
-          tab.id,
-          {
-            type: "start-capture",
-            payload: {
-              strings: {
-                selectArea: t(settings, "capture.selectArea"),
-                dragInstruction: t(settings, "capture.dragInstruction"),
-                cancelHint: t(settings, "capture.cancelHint"),
-                selectionTooSmall: t(settings, "capture.selectionTooSmall"),
-                processingOcr: t(settings, "capture.processingOcr"),
-                ocrComplete: t(settings, "capture.ocrComplete"),
-                noTextFound: t(settings, "capture.noTextFound"),
-                captureFailed: t(settings, "capture.captureFailed"),
-                ocrFailed: t(settings, "capture.ocrFailed"),
-                cancelled: t(settings, "capture.cancelled"),
-              },
-            },
-          },
-          "start-capture",
-        );
-
-        if (response?.ok === false) {
-          console.warn(
-            "LinguaKit: capture shortcut could not reach content script",
-            response.error,
-          );
-        } else if (!response) {
-          console.warn("LinguaKit: capture shortcut did not receive a content-script response");
-        }
-      }
-    });
-  }
-});
-*/

@@ -25,6 +25,22 @@ const domainListEl = document.querySelector("#instant-domain-list");
 const newDomainInput = document.querySelector("#new-domain");
 const addDomainBtn = document.querySelector("#add-domain");
 
+// Auto Page Translate elements
+const autoPageEnabledCheckbox = document.querySelector("#auto-page-enabled");
+const autoPageSettings = document.querySelector("#auto-page-settings");
+const autoPageDomainListEl = document.querySelector("#auto-page-domain-list");
+const newAutoPageDomainInput = document.querySelector("#new-auto-page-domain");
+const addAutoPageDomainBtn = document.querySelector("#add-auto-page-domain");
+const btnExportJson = document.querySelector("#btn-export-json");
+const btnImportJson = document.querySelector("#btn-import-json");
+const importFileInput = document.querySelector("#import-file-input");
+
+const autoPageShortcutCtrlCheckbox = document.querySelector("#auto-page-shortcut-ctrl");
+const autoPageShortcutShiftCheckbox = document.querySelector("#auto-page-shortcut-shift");
+const autoPageShortcutAltCheckbox = document.querySelector("#auto-page-shortcut-alt");
+const autoPageShortcutKeyInput = document.querySelector("#auto-page-shortcut-key");
+const autoPageShortcutPreview = document.querySelector("#auto-page-shortcut-preview");
+
 // Keyboard shortcut elements
 const shortcutCtrlCheckbox = document.querySelector("#shortcut-ctrl");
 const shortcutShiftCheckbox = document.querySelector("#shortcut-shift");
@@ -74,6 +90,7 @@ const addHoverDomain = document.getElementById("add-hover-domain");
 
 let currentAliases = {};
 let currentDomains = [];
+let currentAutoPageDomains = [];
 let currentHoverDomains = [];
 let providers = [];
 let activeProviderId = "builtin";
@@ -112,9 +129,7 @@ function translateUI() {
     el.setAttribute("placeholder", i18n.t(el.getAttribute("data-i18n-placeholder")));
   });
 
-  saveBtn.textContent = i18n.t(
-    saveBtn.textContent.includes("✅") ? "popup.saved" : "popup.savePreferences",
-  );
+  saveBtn.textContent = i18n.t(saveBtn.textContent.includes("✅") ? "popup.saved" : "popup.savePreferences");
 }
 
 function showToast(message, type = "success") {
@@ -148,7 +163,7 @@ async function copyToClipboard(text) {
     showToast(i18n.t("popup.copied"), "success");
   } catch (err) {
     console.error("Failed to copy:", err);
-    showToast("Failed to copy", "error");
+    showToast(i18n.t("popup.failedToCopy"), "error");
   }
 }
 
@@ -247,10 +262,11 @@ async function loadHistory() {
   const favorites = data.favorites || [];
 
   // Mark history items that are in favorites
-  enrichedHistory = history.map((h) => ({
-    ...h,
-    isFavorite: favorites.some((f) => f.source === h.source && f.target === h.target),
-  }));
+  enrichedHistory = history.map((h) =>
+    Object.assign({}, h, {
+      isFavorite: favorites.some((f) => f.source === h.source && f.target === h.target),
+    }),
+  );
 
   renderHistoryList(enrichedHistory);
   renderFavoritesList(favorites);
@@ -376,15 +392,43 @@ function renderDomains() {
   });
 }
 
+function renderAutoPageDomains() {
+  if (!autoPageDomainListEl) return;
+  autoPageDomainListEl.innerHTML = currentAutoPageDomains
+    .map(
+      (item, index) => `
+    <div class="bt-domain-item">
+      <input type="checkbox" ${item.enabled ? "checked" : ""} data-index="${index}" />
+      <span class="bt-domain-name">${item.domain}</span>
+      <button class="bt-remove-alias" data-index="${index}">×</button>
+    </div>
+  `,
+    )
+    .join("");
+
+  autoPageDomainListEl.querySelectorAll("input, button").forEach((el) => {
+    el.addEventListener(el.tagName === "BUTTON" ? "click" : "change", (e) => {
+      const idx = e.target.dataset.index;
+      if (el.tagName === "BUTTON") {
+        currentAutoPageDomains.splice(idx, 1);
+        renderAutoPageDomains();
+      } else {
+        currentAutoPageDomains[idx].enabled = e.target.checked;
+      }
+      saveSettings();
+    });
+  });
+}
+
 function renderProviderList() {
   providerListEl.innerHTML = "";
 
   // Define default provider IDs that cannot be edited or deleted
-  const DEFAULT_PROVIDER_IDS = ["google-translate"];
+  const DEFAULT_PROVIDER_IDS = new Set(["google-translate"]);
 
   providers.forEach((p) => {
     const isActive = p.id === activeProviderId;
-    const isDefaultProvider = DEFAULT_PROVIDER_IDS.includes(p.id);
+    const isDefaultProvider = DEFAULT_PROVIDER_IDS.has(p.id);
 
     const el = document.createElement("div");
     el.className = `bt-provider-item ${isActive ? "active" : ""}`;
@@ -426,7 +470,7 @@ function renderProviderList() {
 
   providerListEl.querySelectorAll(".btn-delete").forEach((btn) => {
     btn.addEventListener("click", (e) => {
-      if (confirm("Delete this provider?")) {
+      if (confirm(i18n.t("popup.confirmDeleteProvider"))) {
         providers = providers.filter((p) => p.id !== e.target.dataset.id);
         if (activeProviderId === e.target.dataset.id) {
           activeProviderId = "google-translate";
@@ -576,7 +620,7 @@ function saveProviderFromForm() {
     });
 
     if (hasError) {
-      showToast("Please fill in all required fields", "error");
+      showToast(i18n.t("popup.fillAllFields"), "error");
       return;
     }
   }
@@ -587,7 +631,7 @@ function saveProviderFromForm() {
     if (idx !== -1) {
       providers[idx].name = name;
       providers[idx].config = config;
-      showToast("Provider updated successfully", "success");
+      showToast(i18n.t("popup.providerUpdated"), "success");
     }
   } else {
     // Create
@@ -598,7 +642,7 @@ function saveProviderFromForm() {
       name,
       config,
     });
-    showToast("Provider added successfully", "success");
+    showToast(i18n.t("popup.providerAdded"), "success");
   }
 
   saveSettings();
@@ -677,7 +721,7 @@ function renderTTSProviderList() {
 
   ttsProviderListEl.querySelectorAll(".btn-delete-tts").forEach((btn) => {
     btn.addEventListener("click", (e) => {
-      if (confirm("Delete this TTS provider?")) {
+      if (confirm(i18n.t("popup.confirmDeleteTTS"))) {
         ttsProviders = ttsProviders.filter((p) => p.id !== e.target.dataset.id);
         if (activeTTSProviderId === e.target.dataset.id) {
           activeTTSProviderId = "google-tts";
@@ -698,7 +742,7 @@ function renderTTSProviderList() {
 
 function openTTSProviderForm(provider = null) {
   editingTTSProviderId = provider ? provider.id : null;
-  ttsFormTitle.textContent = provider ? "Edit TTS Provider" : "Add TTS Provider";
+  ttsFormTitle.textContent = provider ? i18n.t("popup.editTTSProvider") : i18n.t("popup.addTTSProvider");
   ttsFormName.value = provider ? provider.name : "";
   ttsFormUrl.value = provider ? provider.url : "";
 
@@ -719,7 +763,7 @@ function saveTTSProviderFromForm() {
   const url = ttsFormUrl.value.trim();
 
   if (!url) {
-    alert("URL Template is required");
+    alert(i18n.t("popup.urlTemplateRequired"));
     return;
   }
 
@@ -766,6 +810,16 @@ function toggleInstantSettings() {
   }
 }
 
+function toggleAutoPageSettings() {
+  if (!autoPageEnabledCheckbox || !autoPageSettings) return;
+
+  if (autoPageEnabledCheckbox.checked) {
+    autoPageSettings.removeAttribute("hidden");
+  } else {
+    autoPageSettings.setAttribute("hidden", "true");
+  }
+}
+
 function updateShortcutPreview() {
   if (!shortcutPreview) return;
 
@@ -780,7 +834,30 @@ function updateShortcutPreview() {
   const shortcut = parts.join("+");
   const macShortcut = shortcut.replace("Ctrl", "Cmd");
 
-  shortcutPreview.textContent = `${shortcut} (${macShortcut} on Mac)`;
+  shortcutPreview.textContent = i18n
+    .t("popup.shortcutPreview")
+    .replace("{shortcut}", shortcut)
+    .replace("{macShortcut}", macShortcut);
+}
+
+function updateAutoPageShortcutPreview() {
+  if (!autoPageShortcutPreview) return;
+
+  const parts = [];
+  if (autoPageShortcutCtrlCheckbox.checked) parts.push("Ctrl");
+  if (autoPageShortcutShiftCheckbox.checked) parts.push("Shift");
+  if (autoPageShortcutAltCheckbox.checked) parts.push("Alt");
+
+  const key = autoPageShortcutKeyInput.value.toUpperCase() || "P";
+  parts.push(key);
+
+  const shortcut = parts.join("+");
+  const macShortcut = shortcut.replace("Ctrl", "Cmd");
+
+  autoPageShortcutPreview.textContent = i18n
+    .t("popup.shortcutPreview")
+    .replace("{shortcut}", shortcut)
+    .replace("{macShortcut}", macShortcut);
 }
 
 async function loadSettings() {
@@ -817,6 +894,11 @@ async function loadSettings() {
       instantDelayInput.value = (res.settings.instantDelay || 3000) / 1000;
     }
     currentDomains = res.settings.instantDomains || [];
+
+    if (autoPageEnabledCheckbox) {
+      autoPageEnabledCheckbox.checked = res.settings.autoPageTranslateEnabled || false;
+    }
+    currentAutoPageDomains = res.settings.autoPageTranslateDomains || [];
 
     // Load Providers
     providers = res.settings.providers || [
@@ -856,6 +938,19 @@ async function loadSettings() {
     if (shortcutAltCheckbox) shortcutAltCheckbox.checked = shortcut.alt;
     if (shortcutKeyInput) shortcutKeyInput.value = shortcut.key.toUpperCase();
     updateShortcutPreview();
+
+    // Load Auto Page Translate Shortcut
+    const autoPageShortcut = res.settings.autoTranslateToggleShortcut || {
+      key: "P",
+      ctrl: true,
+      shift: true,
+      alt: false,
+    };
+    if (autoPageShortcutCtrlCheckbox) autoPageShortcutCtrlCheckbox.checked = autoPageShortcut.ctrl;
+    if (autoPageShortcutShiftCheckbox) autoPageShortcutShiftCheckbox.checked = autoPageShortcut.shift;
+    if (autoPageShortcutAltCheckbox) autoPageShortcutAltCheckbox.checked = autoPageShortcut.alt;
+    if (autoPageShortcutKeyInput) autoPageShortcutKeyInput.value = autoPageShortcut.key.toUpperCase();
+    updateAutoPageShortcutPreview();
 
     // Load Hover Translate settings
     hoverTranslateEnabled.checked = res.settings.hoverTranslateEnabled || false;
@@ -907,6 +1002,9 @@ async function loadSettings() {
     if (instantDelayInput) instantDelayInput.value = 3;
     currentDomains = [];
 
+    if (autoPageEnabledCheckbox) autoPageEnabledCheckbox.checked = false;
+    currentAutoPageDomains = [];
+
     providers = [
       {
         id: "google-translate",
@@ -937,14 +1035,22 @@ async function loadSettings() {
     if (shortcutAltCheckbox) shortcutAltCheckbox.checked = false;
     if (shortcutKeyInput) shortcutKeyInput.value = "I";
     updateShortcutPreview();
+
+    if (autoPageShortcutCtrlCheckbox) autoPageShortcutCtrlCheckbox.checked = true;
+    if (autoPageShortcutShiftCheckbox) autoPageShortcutShiftCheckbox.checked = true;
+    if (autoPageShortcutAltCheckbox) autoPageShortcutAltCheckbox.checked = false;
+    if (autoPageShortcutKeyInput) autoPageShortcutKeyInput.value = "P";
+    updateAutoPageShortcutPreview();
   }
 
   renderAliases();
   renderDomains();
+  renderAutoPageDomains();
   renderProviderList();
   renderTTSProviderList();
   updateSettingsVisibility();
   toggleInstantSettings();
+  toggleAutoPageSettings();
 }
 
 async function saveSettings() {
@@ -973,6 +1079,15 @@ async function saveSettings() {
       ctrl: shortcutCtrlCheckbox?.checked || false,
       shift: shortcutShiftCheckbox?.checked || false,
       alt: shortcutAltCheckbox?.checked || false,
+    },
+    // Auto Page Translate settings
+    autoPageTranslateEnabled: autoPageEnabledCheckbox?.checked || false,
+    autoPageTranslateDomains: currentAutoPageDomains,
+    autoTranslateToggleShortcut: {
+      key: autoPageShortcutKeyInput?.value.toUpperCase() || "P",
+      ctrl: autoPageShortcutCtrlCheckbox?.checked || false,
+      shift: autoPageShortcutShiftCheckbox?.checked || false,
+      alt: autoPageShortcutAltCheckbox?.checked || false,
     },
     // Hover Translate settings
     hoverTranslateEnabled: hoverTranslateEnabled?.checked || false,
@@ -1018,9 +1133,9 @@ addAliasBtn.addEventListener("click", () => {
     aliasValueInput.value = "";
     renderAliases();
     saveSettings();
-    showToast("Alias added successfully", "success");
+    showToast(i18n.t("popup.aliasAdded"), "success");
   } else {
-    showToast("Please fill in both Alias key and value", "error");
+    showToast(i18n.t("popup.aliasError"), "error");
     if (!key) aliasKeyInput.classList.add("error");
     if (!value) aliasValueInput.classList.add("error");
   }
@@ -1082,12 +1197,37 @@ if (addDomainBtn && newDomainInput) {
       newDomainInput.value = "";
       renderDomains();
       saveSettings();
-      showToast("Domain added successfully", "success");
+      showToast(i18n.t("popup.domainAdded") || "Domain added successfully", "success");
     } else if (!domain) {
-      showToast("Please enter a domain name", "error");
+      showToast(i18n.t("popup.domainError"), "error");
       newDomainInput.classList.add("error");
     } else {
-      showToast("Domain already exists", "error");
+      showToast(i18n.t("popup.domainExists"), "error");
+    }
+  });
+}
+
+if (autoPageEnabledCheckbox) {
+  autoPageEnabledCheckbox.addEventListener("change", () => {
+    toggleAutoPageSettings();
+    saveSettings();
+  });
+}
+
+if (addAutoPageDomainBtn && newAutoPageDomainInput) {
+  addAutoPageDomainBtn.addEventListener("click", () => {
+    const domain = newAutoPageDomainInput.value.trim();
+    if (domain && !currentAutoPageDomains.some((d) => d.domain === domain)) {
+      currentAutoPageDomains.push({ domain, enabled: true });
+      newAutoPageDomainInput.value = "";
+      renderAutoPageDomains();
+      saveSettings();
+      showToast(i18n.t("popup.domainAdded") || "Domain added successfully", "success");
+    } else if (!domain) {
+      showToast(i18n.t("popup.domainError"), "error");
+      newAutoPageDomainInput.classList.add("error");
+    } else {
+      showToast(i18n.t("popup.domainExists"), "error");
     }
   });
 }
@@ -1127,6 +1267,39 @@ if (shortcutKeyInput) {
   shortcutKeyInput.addEventListener("change", saveSettings);
 }
 
+if (autoPageShortcutCtrlCheckbox) {
+  autoPageShortcutCtrlCheckbox.addEventListener("change", () => {
+    updateAutoPageShortcutPreview();
+    saveSettings();
+  });
+}
+
+if (autoPageShortcutShiftCheckbox) {
+  autoPageShortcutShiftCheckbox.addEventListener("change", () => {
+    updateAutoPageShortcutPreview();
+    saveSettings();
+  });
+}
+
+if (autoPageShortcutAltCheckbox) {
+  autoPageShortcutAltCheckbox.addEventListener("change", () => {
+    updateAutoPageShortcutPreview();
+    saveSettings();
+  });
+}
+
+if (autoPageShortcutKeyInput) {
+  autoPageShortcutKeyInput.addEventListener("input", (e) => {
+    e.target.value = e.target.value
+      .replace(/[^a-zA-Z]/g, "")
+      .toUpperCase()
+      .slice(0, 1);
+    updateAutoPageShortcutPreview();
+  });
+
+  autoPageShortcutKeyInput.addEventListener("change", saveSettings);
+}
+
 document.querySelectorAll(".bt-tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".bt-tab").forEach((t) => t.classList.remove("active"));
@@ -1137,6 +1310,23 @@ document.querySelectorAll(".bt-tab").forEach((tab) => {
     const contentEl = document.getElementById(contentId);
     if (contentEl) contentEl.classList.add("active");
 
+    // tab.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    // Targeted scroll for the tabs container only to prevent horizontal UI shift
+    const tabsContainer = document.querySelector(".bt-tabs");
+    if (tabsContainer) {
+      const tabOffsetLeft = tab.offsetLeft;
+      const tabWidth = tab.offsetWidth;
+      const containerWidth = tabsContainer.offsetWidth;
+      tabsContainer.scrollTo({
+        left: tabOffsetLeft - containerWidth / 2 + tabWidth / 2,
+        behavior: "smooth",
+      });
+    }
+
+    // Force reset horizontal scroll of the main wrap to prevent accidental shifting
+    const wrap = document.querySelector(".bt-wrap");
+    if (wrap) wrap.scrollLeft = 0;
+
     // Hide save button on help tab
     if (tab.dataset.tab === "help") {
       saveBtn.style.display = "none";
@@ -1145,6 +1335,10 @@ document.querySelectorAll(".bt-tab").forEach((tab) => {
       if (providerForm.hidden && ttsProviderForm.hidden) {
         saveBtn.style.display = "block";
       }
+    }
+
+    if (tab.dataset.tab === "auto-page") {
+      updateExportButtonStatus();
     }
   });
 });
@@ -1270,17 +1464,193 @@ function renderHoverDomainList(domains) {
         }
         currentHoverDomains = settings.hoverTranslateDomains;
         chrome.runtime.sendMessage({ type: "set-settings", settings }, () => {
-          if (el.classList.contains("remove-hover-domain"))
-            renderHoverDomainList(settings.hoverTranslateDomains);
+          if (el.classList.contains("remove-hover-domain")) renderHoverDomainList(settings.hoverTranslateDomains);
         });
       });
     });
   });
 }
 
+// Manual Page Translate Trigger
+const btnTranslateNow = document.querySelector("#btn-translate-now");
+if (btnTranslateNow) {
+  btnTranslateNow.addEventListener("click", async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url || !tab.url.startsWith("http")) {
+        showToast(i18n.t("toast.invalidPage") || "Cannot translate this page", "error");
+        return;
+      }
+
+      try {
+        await chrome.tabs.sendMessage(tab.id, { type: "trigger-page-translate" });
+        window.close();
+      } catch (err) {
+        console.error("LinguaKit: Content script not responding", err);
+        showToast(i18n.t("toast.refreshRequired") || "Please refresh the page to enable translation", "error");
+      }
+    } catch (err) {
+      console.error("LinguaKit: Error triggering manual translate:", err);
+    }
+  });
+}
+
+// Export/Import Translation Data
+if (btnExportJson) {
+  btnExportJson.disabled = true; // Initially disabled
+}
+
+if (btnExportJson) {
+  btnExportJson.addEventListener("click", async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url || !tab.url.startsWith("http")) {
+        showToast(i18n.t("toast.invalidPage") || "Cannot perform this action on this page", "error");
+        return;
+      }
+
+      const url = new URL(tab.url);
+      const domain = url.hostname;
+
+      const data = await chrome.storage.local.get("settings");
+      const settings = data.settings || {};
+      const targetLang = settings.targetLanguageCode || "en";
+
+      // Request content script to capture and save first
+      try {
+        await chrome.tabs.sendMessage(tab.id, { type: "capture-page-cache" });
+      } catch (msgErr) {
+        console.warn("LinguaKit: Could not trigger capture (page not refreshed?)", msgErr);
+      }
+
+      const res = await chrome.runtime.sendMessage({
+        type: "get-page-cache",
+        payload: { domain, targetLang },
+      });
+
+      if (!res?.ok || !res.cache || Object.keys(res.cache).length === 0) {
+        showToast(i18n.t("toast.noTranslationsExport") || "No translations found to export", "error");
+        return;
+      }
+
+      const dataStr = JSON.stringify(res.cache, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `linguakit_${domain.replace(/\./g, "_")}_${targetLang}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+
+      showToast(i18n.t("toast.exportSuccess") || "Exported successfully");
+    } catch (err) {
+      console.error("Export failed:", err);
+      showToast(i18n.t("popup.exportFailed"), "error");
+    }
+  });
+}
+
+if (btnImportJson) {
+  btnImportJson.addEventListener("click", () => {
+    importFileInput.click();
+  });
+}
+
+if (importFileInput) {
+  importFileInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url || !tab.url.startsWith("http")) {
+        showToast(i18n.t("toast.invalidPage") || "Cannot perform this action on this page", "error");
+        return;
+      }
+
+      const url = new URL(tab.url);
+      const domain = url.hostname;
+
+      const data = await chrome.storage.local.get("settings");
+      const settings = data.settings || {};
+      const targetLang = settings.targetLanguageCode || "en";
+
+      const reader = new FileReader();
+      reader.addEventListener("load", async (event) => {
+        try {
+          const cache = JSON.parse(event.target.result);
+          if (typeof cache !== "object" || Array.isArray(cache)) {
+            throw new Error("Invalid format");
+          }
+
+          await chrome.runtime.sendMessage({
+            type: "set-page-cache",
+            payload: { domain, targetLang, cache },
+          });
+
+          // Notify content script to apply immediately
+          try {
+            await chrome.tabs.sendMessage(tab.id, { type: "apply-page-cache", payload: { cache } });
+          } catch (msgErr) {
+            console.warn("LinguaKit: Could not notify content script (page not refreshed?)", msgErr);
+          }
+
+          showToast(i18n.t("toast.importSuccess") || "Imported successfully");
+          e.target.value = ""; // Reset input
+        } catch (err) {
+          console.error("Import JSON parsing failed:", err);
+          showToast(i18n.t("toast.importError") || "Import failed", "error");
+        }
+      });
+      reader.readAsText(file);
+    } catch (err) {
+      console.error("Import failed:", err);
+      showToast(i18n.t("popup.importFailed"), "error");
+    }
+  });
+}
+
 loadSettings();
 displayVersion();
 loadHistory();
+
+async function updateExportButtonStatus() {
+  if (!btnExportJson) return;
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id || !tab.url || !tab.url.startsWith("http")) {
+      btnExportJson.disabled = true;
+      btnExportJson.title = "Not available on this page";
+      return;
+    }
+
+    const response = await chrome.tabs.sendMessage(tab.id, { type: "get-page-cache-status" });
+    if (response && response.isCacheReady) {
+      btnExportJson.disabled = false;
+      btnExportJson.title = "";
+    } else {
+      btnExportJson.disabled = true;
+      btnExportJson.title = "Waiting for translations to be cached...";
+    }
+  } catch (err) {
+    console.warn("LinguaKit: Could not check cache status", err);
+    btnExportJson.disabled = true;
+  }
+}
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === "page-cache-status-updated") {
+    if (message.isCacheReady) {
+      if (btnExportJson) {
+        btnExportJson.disabled = false;
+        btnExportJson.title = "";
+      }
+    }
+  }
+});
 
 // Clear errors when typing
 document.addEventListener("input", (e) => {

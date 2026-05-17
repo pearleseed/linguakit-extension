@@ -77,17 +77,13 @@ function getTranslationUnits(root) {
     // Skip our own wrappers
     if (
       node.nodeType === Node.ELEMENT_NODE &&
-      (node.hasAttribute("data-linguakit-wrapper") ||
-        node.classList.contains("bt-injected-content"))
+      (node.hasAttribute("data-linguakit-wrapper") || node.classList.contains("bt-injected-content"))
     ) {
       continue;
     }
 
     // Skip scripts/styles
-    if (
-      node.nodeType === Node.ELEMENT_NODE &&
-      ["script", "style", "noscript"].includes(node.tagName.toLowerCase())
-    ) {
+    if (node.nodeType === Node.ELEMENT_NODE && ["script", "style", "noscript"].includes(node.tagName.toLowerCase())) {
       continue;
     }
 
@@ -148,9 +144,7 @@ function escapeTextBrackets(text) {
  */
 function restoreAndEscapeBrackets(text) {
   if (!text) return text;
-  return text
-    .replace(new RegExp(BRACKET_MARKERS.LT, "g"), "&lt;")
-    .replace(new RegExp(BRACKET_MARKERS.GT, "g"), "&gt;");
+  return text.replace(new RegExp(BRACKET_MARKERS.LT, "g"), "&lt;").replace(new RegExp(BRACKET_MARKERS.GT, "g"), "&gt;");
 }
 
 /**

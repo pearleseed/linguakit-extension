@@ -17,10 +17,7 @@ body.bt-hover-translate-active * {
   /* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2); Removed for native look */
   animation: btHoverFadeIn 0.2s ease-out;
   position: relative;
-  background-color: var(
-    --bt-hover-bg-color,
-    transparent
-  ); /* Default to transparent or user setting */
+  background-color: var(--bt-hover-bg-color, transparent); /* Default to transparent or user setting */
   color: var(--bt-hover-text-color, inherit); /* Default to inherit or user setting */
   display: block; /* Ensure block display */
 }

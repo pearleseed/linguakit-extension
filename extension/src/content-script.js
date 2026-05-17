@@ -100,11 +100,63 @@ window.addEventListener("unhandledrejection", (event) => {
 
     // Listen for setting changes
     try {
-      chrome.storage.onChanged.addListener((changes, namespace) => {
+      chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.type === "trigger-page-translate") {
+          getSettings().then((settings) => {
+            autoTranslatePage(settings, true); // Always learn for manual trigger
+            sendResponse({ ok: true });
+          });
+          return true;
+        }
+
+        if (message.type === "capture-page-cache") {
+          getSettings().then((settings) => {
+            const domain = window.location.hostname;
+            const targetLang = settings.targetLanguageCode || "en";
+            if (originalTexts.length > 0) {
+              captureAndSavePageCache(domain, targetLang, true).then(() => {
+                sendResponse({ ok: true });
+              });
+            } else {
+              sendResponse({ ok: false, error: "No snapshot" });
+            }
+          });
+          return true;
+        }
+
+        if (message.type === "apply-page-cache") {
+          if (message.payload && message.payload.cache) {
+            applyPageCache(message.payload.cache).then(() => {
+              sendResponse({ ok: true });
+            });
+          }
+          return true;
+        }
+
+        if (message.type === "get-page-cache-status") {
+          sendResponse({ isCacheReady: isPageCached });
+          return true;
+        }
+      });
+
+      chrome.storage.onChanged.addListener(async (changes, namespace) => {
         if (namespace === "local" && changes.translatorSettings) {
           const newSettings = changes.translatorSettings.newValue;
-          if (newSettings && newSettings.interfaceLanguage) {
-            i18n.setLanguage(newSettings.interfaceLanguage);
+          const oldSettings = changes.translatorSettings.oldValue || {};
+
+          if (newSettings) {
+            // Update UI language
+            if (newSettings.interfaceLanguage) {
+              i18n.setLanguage(newSettings.interfaceLanguage);
+            }
+
+            // Trigger Auto Page Translate if it was just enabled or a domain was added
+            const isAutoPageNow = isAutoPageTranslateDomain(newSettings);
+            const wasAutoPageBefore = isAutoPageTranslateDomain(oldSettings);
+
+            if (isAutoPageNow && !wasAutoPageBefore) {
+              await autoTranslatePage(newSettings);
+            }
           }
         }
       });
@@ -115,8 +167,9 @@ window.addEventListener("unhandledrejection", (event) => {
     injectGlobalStylesheet();
     registerAutoDetection();
     registerInstantMode();
+    registerAutoPageTranslate();
     registerSelectionMode();
-    // registerInstantToggleShortcut();
+    registerToggleShortcuts();
     registerInstantLabelIndicator();
     registerHoverTranslate();
     // registerHoverToggleShortcut();
@@ -129,20 +182,6 @@ window.addEventListener("unhandledrejection", (event) => {
         sendResponse({ ok: true });
         return true;
       }
-
-/*
-      if (message.type === "ocr-success") {
-        if (!isTopFrame()) return false;
-
-        showOCRSelectionPopup(message.payload)
-          .then(() => sendResponse({ ok: true }))
-          .catch((err) => {
-            console.error("LinguaKit: OCR popup failed:", err);
-            sendResponse({ ok: false, error: String(err?.message || err) });
-          });
-        return true;
-      }
-*/
 
       return false;
     });
@@ -300,7 +339,7 @@ async function requestTranslation(payload) {
       error.message.includes("Could not establish connection")
     ) {
       cleanupExtensionElements();
-      throw new Error(i18n.t("toast.extensionUpdated"));
+      throw new Error(i18n.t("toast.extensionUpdated"), { cause: error });
     }
     throw error;
   }
@@ -565,8 +604,7 @@ function domainMatchesLocation(domainConfig, location = window.location) {
   if (!parsed?.hostname) return false;
 
   const currentHost = location.hostname.toLowerCase();
-  const hostnameMatches =
-    currentHost === parsed.hostname || currentHost.endsWith(`.${parsed.hostname}`);
+  const hostnameMatches = currentHost === parsed.hostname || currentHost.endsWith(`.${parsed.hostname}`);
   if (!hostnameMatches) return false;
 
   return !parsed.pathname || location.pathname.startsWith(parsed.pathname);
@@ -659,13 +697,18 @@ function setFieldText(element, text, options = {}) {
   }
 }
 
-function buildInlineSuggestion(
-  element,
-  translatedText,
-  providerInfo,
-  position = "auto",
-  settings = {},
-) {
+// Prevent clicking on the suggestion from blurring the input
+// EXCEPT for select elements (allow clicking model selector)
+const preventBlur = (e) => {
+  // Allow clicks on select elements
+  if (e.target.tagName === "SELECT" || e.target.closest("select")) {
+    return;
+  }
+  e.preventDefault();
+  e.stopPropagation();
+};
+
+function buildInlineSuggestion(element, translatedText, providerInfo, position = "auto", settings = {}) {
   const container = document.createElement("div");
   container.className = "bt-inline-suggestion bt-vars-container";
 
@@ -788,16 +831,6 @@ function buildInlineSuggestion(
     </div>
   `;
 
-  // Prevent clicking on the suggestion from blurring the input
-  // EXCEPT for select elements (allow clicking model selector)
-  const preventBlur = (e) => {
-    // Allow clicks on select elements
-    if (e.target.tagName === "SELECT" || e.target.closest("select")) {
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-  };
   container.addEventListener("mousedown", preventBlur);
   container.addEventListener("pointerdown", preventBlur);
 
@@ -1036,13 +1069,7 @@ async function handleInstantTranslate(element) {
         // Use 'auto' by default for smart positioning
         const position = domainConfig.position || "auto";
         const providerInfo = `${res.result.providerName || "AI"} (${res.result.providerType || "Bot"})`;
-        currentSuggestion = buildInlineSuggestion(
-          element,
-          res.result.translation,
-          providerInfo,
-          position,
-          settings,
-        );
+        currentSuggestion = buildInlineSuggestion(element, res.result.translation, providerInfo, position, settings);
         setupSuggestionKeyHandlers(element, currentSuggestion);
 
         // Handle provider change
@@ -1206,8 +1233,7 @@ async function toggleInstantDomainForCurrentUrl() {
       // If it doesn't exist, it will be added below
     } else if (matchingDomainIndex !== -1) {
       // Global is already on, so we just toggle the domain
-      settings.instantDomains[matchingDomainIndex].enabled =
-        !settings.instantDomains[matchingDomainIndex].enabled;
+      settings.instantDomains[matchingDomainIndex].enabled = !settings.instantDomains[matchingDomainIndex].enabled;
     }
 
     if (matchingDomainIndex === -1) {
@@ -1296,34 +1322,384 @@ function showToastBottomRight(message) {
   showToast(message);
 }
 
-function registerInstantToggleShortcut() {
+// ============================================
+// PAGE TRANSLATION CACHE LOGIC
+// ============================================
+function getTextNodes(container) {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      // Skip extension elements and hidden elements
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+
+      if (
+        parent.closest(".bt-vars-container, .lk-toast-container") ||
+        parent.tagName === "SCRIPT" ||
+        parent.tagName === "STYLE" ||
+        parent.tagName === "NOSCRIPT"
+      ) {
+        return NodeFilter.FILTER_REJECT;
+      }
+
+      const text = node.textContent.trim();
+      return text ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    },
+  });
+
+  const nodes = [];
+  let node;
+  while ((node = walker.nextNode())) {
+    nodes.push(node);
+  }
+  return nodes;
+}
+
+async function applyPageCache(cache) {
+  const nodes = getTextNodes(document.body);
+  let count = 0;
+
+  for (const node of nodes) {
+    const text = node.textContent.trim();
+    if (cache[text]) {
+      node.textContent = cache[text];
+      count++;
+    }
+  }
+
+  if (count > 0) {
+    isPageCached = true;
+    chrome.runtime.sendMessage({ type: "page-cache-status-updated", isCacheReady: true });
+    if (i18n && typeof i18n.t === "function") {
+      showToast(i18n.t("toast.applyingCache"));
+    } else {
+      showToast("Applying cached translations...");
+    }
+    document.documentElement.classList.add("lk-translated");
+    return true;
+  }
+  return false;
+}
+
+let originalTexts = []; // Store original strings in order
+let isPageCached = false;
+
+function snapshotPageTexts() {
+  const isAlreadyTranslated =
+    document.documentElement.classList.contains("translated-ltr") ||
+    document.documentElement.classList.contains("translated-rtl") ||
+    document.documentElement.classList.contains("lk-translated");
+
+  if (originalTexts.length > 0 && isAlreadyTranslated) {
+    return;
+  }
+
+  const nodes = getTextNodes(document.body);
+  originalTexts = nodes.map((n) => n.textContent.trim());
+  console.log(`LinguaKit: Captured ${originalTexts.length} original text segments.`);
+}
+
+async function captureAndSavePageCache(domain, targetLang, silent = false) {
+  if (originalTexts.length === 0) return;
+
+  const currentNodes = getTextNodes(document.body);
+  const cache = {};
+  let count = 0;
+
+  // We match by index. This is robust even if Google Translate replaced nodes
+  // as long as the logical order of text segments is preserved.
+  const limit = Math.min(originalTexts.length, currentNodes.length);
+
+  for (let i = 0; i < limit; i++) {
+    const originalText = originalTexts[i];
+    const currentText = currentNodes[i].textContent.trim();
+
+    if (currentText && originalText && currentText !== originalText) {
+      // Basic heuristic: if the current text is just the original text (after trim), skip
+      cache[originalText] = currentText;
+      count++;
+    }
+  }
+
+  if (count > 0) {
+    try {
+      await safeRuntimeCall(() =>
+        chrome.runtime.sendMessage({
+          type: "set-page-cache",
+          payload: { domain, targetLang, cache },
+        }),
+      );
+      isPageCached = true;
+      chrome.runtime.sendMessage({ type: "page-cache-status-updated", isCacheReady: true });
+      if (!silent) {
+        showToast(i18n.t("toast.cacheSaved") || "Translations cached");
+      }
+      console.log(`LinguaKit: Successfully saved ${count} translations to cache.`);
+    } catch (err) {
+      console.error("LinguaKit: Error saving page cache:", err);
+    }
+  } else {
+    console.warn("LinguaKit: No new translations captured from DOM.");
+  }
+}
+
+function monitorGoogleTranslate(domain, targetLang) {
+  const observer = new MutationObserver(() => {
+    if (
+      document.documentElement.classList.contains("translated-ltr") ||
+      document.documentElement.classList.contains("translated-rtl")
+    ) {
+      observer.disconnect();
+      showToast(i18n.t("toast.translationComplete") || "Translation complete");
+      // Wait a bit for translation to stabilize
+      setTimeout(() => captureAndSavePageCache(domain, targetLang), 2500);
+    }
+  });
+
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
+  // Fallback timer
+  setTimeout(() => {
+    observer.disconnect();
+    if (originalTexts.length > 0) {
+      captureAndSavePageCache(domain, targetLang, true);
+    }
+  }, 15000);
+}
+
+// AUTO PAGE TRANSLATE LOGIC
+function isAutoPageTranslateDomain(settings) {
+  if (!settings.autoPageTranslateEnabled) return null;
+
+  return (
+    settings.autoPageTranslateDomains?.find((domainConfig) => {
+      return domainConfig.enabled && domainMatchesLocation(domainConfig);
+    }) || null
+  );
+}
+
+async function registerAutoPageTranslate() {
+  if (!isTopFrame()) return;
+
+  try {
+    const settings = await getSettings();
+    if (settings.enabled === false) return;
+
+    // registerAutoPageTranslate logic
+    if (isAutoPageTranslateDomain(settings)) {
+      const domain = window.location.hostname;
+      const targetLang = settings.targetLanguageCode || "en";
+
+      // Try applying cache first
+      try {
+        const res = await safeRuntimeCall(() =>
+          chrome.runtime.sendMessage({
+            type: "get-page-cache",
+            payload: { domain, targetLang },
+          }),
+        );
+
+        if (res?.ok && res.cache) {
+          const applied = await applyPageCache(res.cache);
+          if (applied) return; // Exit if cache applied successfully
+        }
+      } catch (e) {
+        console.log("LinguaKit: Cache check failed, falling back to Google Translate", e.message);
+      }
+
+      // No cache or apply failed, use Google Translate and learn
+      await autoTranslatePage(settings, true);
+    }
+  } catch (err) {
+    console.error("LinguaKit: registerAutoPageTranslate error:", err);
+  }
+}
+
+function injectMainWorldScript() {
+  return new Promise((resolve) => {
+    if (document.getElementById("lk-main-world-script")) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "lk-main-world-script";
+    script.src = chrome.runtime.getURL("src/page-translate.js");
+    script.addEventListener("load", () => resolve());
+    script.addEventListener("error", () => {
+      console.error("LinguaKit: Failed to load main world script");
+      resolve(); // Still resolve to not block
+    });
+    document.head.appendChild(script);
+
+    // Listen for errors from main world (e.g. ad-blocker)
+    window.addEventListener("lk-page-translate-error", (event) => {
+      if (event.detail?.error === "BLOCKED_BY_CONTENT_BLOCKER") {
+        showToast(i18n.t("toast.translateBlocked") || "Translation blocked by browser/extension (ad-blocker).");
+      }
+    });
+  });
+}
+
+async function autoTranslatePage(settings, learn = false) {
+  // If translated by Google, skip (but allowed if already has google_translate_element for re-triggering)
+  if (
+    document.documentElement.classList.contains("translated-ltr") ||
+    document.documentElement.classList.contains("translated-rtl") ||
+    document.documentElement.classList.contains("lk-translated")
+  ) {
+    // Only return if we are already in translated state
+    // If user manually triggers it again, we might want to let it through to page-translate
+  }
+
+  // Ensure main world script is injected and ready
+  await injectMainWorldScript();
+
+  const targetLang = settings.targetLanguageCode || "en";
+
+  // Create Google Translate Element container if not exists
+  if (!document.getElementById("google_translate_element")) {
+    const div = document.createElement("div");
+    div.id = "google_translate_element";
+    div.style.display = "none";
+    document.body.appendChild(div);
+  }
+
+  // Set the googtrans cookie to trigger translation automatically
+  const domain = window.location.hostname;
+  const cookieFlags = window.location.protocol === "https:" ? "; Secure; SameSite=Lax" : "; SameSite=Lax";
+
+  // Set cookie for current domain and also without explicit domain for broader compatibility
+  document.cookie = `googtrans=/auto/${targetLang}; path=/; domain=${domain}${cookieFlags}`;
+  document.cookie = `googtrans=/auto/${targetLang}; path=/${cookieFlags}`;
+
+  // Give a small delay for cookie to propagate and main script to be ready
+  await new Promise((r) => setTimeout(r, 100));
+
+  // Trigger translation in main world
+  window.dispatchEvent(
+    new CustomEvent("lk-trigger-page-translate", {
+      detail: { targetLang },
+    }),
+  );
+
+  if (learn) {
+    isPageCached = false;
+    chrome.runtime.sendMessage({ type: "page-cache-status-updated", isCacheReady: false });
+    snapshotPageTexts();
+    monitorGoogleTranslate(window.location.hostname, targetLang);
+  }
+
+  // Show a toast
+  if (i18n && typeof i18n.t === "function") {
+    showToast(i18n.t("toast.autoPageTranslated"));
+  } else {
+    showToast("Auto Page Translate activated");
+  }
+}
+
+// Helper functions moved or removed if no longer used
+
+async function toggleAutoPageTranslateDomainForCurrentUrl() {
+  try {
+    const settings = await getSettings();
+    if (!settings.autoPageTranslateDomains) {
+      settings.autoPageTranslateDomains = [];
+    }
+
+    const matchingDomainIndex = findDomainIndexForCurrentLocation(settings.autoPageTranslateDomains);
+
+    if (!settings.autoPageTranslateEnabled) {
+      settings.autoPageTranslateEnabled = true;
+    }
+
+    if (matchingDomainIndex !== -1) {
+      settings.autoPageTranslateDomains[matchingDomainIndex].enabled =
+        !settings.autoPageTranslateDomains[matchingDomainIndex].enabled;
+    } else {
+      settings.autoPageTranslateDomains.push({
+        domain: window.location.hostname,
+        enabled: true,
+      });
+    }
+
+    await chrome.runtime.sendMessage({
+      type: "set-settings",
+      settings,
+    });
+
+    const isEnabled =
+      matchingDomainIndex === -1 ? true : settings.autoPageTranslateDomains[matchingDomainIndex].enabled;
+
+    if (isEnabled) {
+      showToast(i18n?.t("toast.autoPageEnabled") || "Auto Page Translate enabled for this domain");
+      // Auto trigger if enabling
+      await autoTranslatePage(settings);
+    } else {
+      showToast(i18n?.t("toast.autoPageDisabled") || "Auto Page Translate disabled");
+      // Clear the cookie
+      document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname}`;
+      document.cookie = "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    }
+  } catch (error) {
+    console.error("LinguaKit: Error toggling auto page domain:", error);
+  }
+}
+
+function registerToggleShortcuts() {
   if (!isTopFrame()) return;
 
   document.addEventListener(
     "keydown",
     async (e) => {
+      // Ignore if typing in an input
+      const isTyping = e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable;
+
+      if (isTyping) return;
+
       const settings = await getSettings();
-      const shortcut = settings.instantToggleShortcut || {
+
+      // Instant Translate Shortcut
+      const instantShortcut = settings.instantToggleShortcut || {
         key: "I",
         ctrl: true,
         shift: true,
         alt: false,
       };
 
-      // Check if shortcut matches
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
       const modifierKey = isMac ? e.metaKey : e.ctrlKey;
 
-      const matches =
-        e.key.toUpperCase() === shortcut.key.toUpperCase() &&
-        modifierKey === shortcut.ctrl &&
-        e.shiftKey === shortcut.shift &&
-        e.altKey === shortcut.alt;
+      const instantMatches =
+        e.key.toUpperCase() === instantShortcut.key.toUpperCase() &&
+        modifierKey === instantShortcut.ctrl &&
+        e.shiftKey === instantShortcut.shift &&
+        e.altKey === instantShortcut.alt;
 
-      if (matches) {
+      if (instantMatches) {
         e.preventDefault();
         e.stopPropagation();
         await toggleInstantDomainForCurrentUrl();
+        return;
+      }
+
+      // Auto Page Translate Shortcut
+      const autoPageShortcut = settings.autoTranslateToggleShortcut || {
+        key: "P",
+        ctrl: true,
+        shift: true,
+        alt: false,
+      };
+
+      const autoPageMatches =
+        e.key.toUpperCase() === autoPageShortcut.key.toUpperCase() &&
+        modifierKey === autoPageShortcut.ctrl &&
+        e.shiftKey === autoPageShortcut.shift &&
+        e.altKey === autoPageShortcut.alt;
+
+      if (autoPageMatches) {
+        e.preventDefault();
+        e.stopPropagation();
+        await toggleAutoPageTranslateDomainForCurrentUrl();
+        return;
       }
     },
     true,
@@ -1378,9 +1754,8 @@ function registerInstantLabelIndicator() {
     gap: 3px;
     box-shadow: 0 2px 8px rgba(14, 165, 233, 0.25), 0 1px 3px rgba(0, 0, 0, 0.1);
     white-space: nowrap;
-    backdrop-filter: blur(6px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    opacity: 0.88;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    opacity: 1;
     animation: labelFadeIn 0.3s ease-out;
   `;
 
@@ -1575,9 +1950,7 @@ function getAvailableViewport() {
   const rightPanels = document.querySelectorAll(
     '[style*="position: fixed"][style*="right: 0"], .devtools-panel, .sidebar-panel',
   );
-  const leftPanels = document.querySelectorAll(
-    '[style*="position: fixed"][style*="left: 0"], .left-panel',
-  );
+  const leftPanels = document.querySelectorAll('[style*="position: fixed"][style*="left: 0"], .left-panel');
 
   let rightOffset = 0;
   let leftOffset = 0;
@@ -1604,22 +1977,6 @@ function getAvailableViewport() {
   };
 }
 
-function getFallbackSelectionRect() {
-  const width = Math.min(360, Math.max(260, window.innerWidth - 32));
-  const height = 180;
-  const left = Math.max(16, (window.innerWidth - width) / 2);
-  const top = Math.max(16, (window.innerHeight - height) / 2);
-
-  return {
-    top,
-    left,
-    width,
-    height,
-    bottom: top + height,
-    right: left + width,
-  };
-}
-
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -1627,61 +1984,6 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-}
-
-function normalizeOcrRect(rect) {
-  if (!rect || typeof rect !== "object") {
-    return getFallbackSelectionRect();
-  }
-
-  const dpr = window.devicePixelRatio || 1;
-  const left = Number(rect.left ?? rect.x / dpr);
-  const top = Number(rect.top ?? rect.y / dpr);
-  const width = Number(rect.width) / (rect.x !== undefined ? dpr : 1);
-  const height = Number(rect.height) / (rect.y !== undefined ? dpr : 1);
-
-  if (
-    !Number.isFinite(left) ||
-    !Number.isFinite(top) ||
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
-    width <= 0 ||
-    height <= 0
-  ) {
-    return getFallbackSelectionRect();
-  }
-
-  const normalized = {
-    left: Math.max(0, Math.min(left, window.innerWidth - 1)),
-    top: Math.max(0, Math.min(top, window.innerHeight - 1)),
-    width: Math.max(1, Math.min(width, window.innerWidth)),
-    height: Math.max(1, Math.min(height, window.innerHeight)),
-  };
-  normalized.right = Math.min(window.innerWidth, normalized.left + normalized.width);
-  normalized.bottom = Math.min(window.innerHeight, normalized.top + normalized.height);
-  normalized.width = normalized.right - normalized.left;
-  normalized.height = normalized.bottom - normalized.top;
-  return normalized;
-}
-
-async function showOCRSelectionPopup(payload = {}) {
-  const text = String(payload.text || "").trim();
-  if (!text) {
-    throw new Error("OCR text is empty");
-  }
-
-  const rect = normalizeOcrRect(payload.rect);
-  if (typeof window.showSelectionPopupWithText === "function") {
-    await window.showSelectionPopupWithText(text, rect);
-    return;
-  }
-
-  if (typeof showTranslationPopup === "function") {
-    await showTranslationPopup(rect, text, "bottom");
-    return;
-  }
-
-  throw new Error("Selection popup is not available");
 }
 
 // Helper function to safely make chrome.runtime calls
@@ -1699,7 +2001,7 @@ async function safeRuntimeCall(callback) {
       error.message.includes("receiving end does not exist")
     ) {
       cleanupExtensionElements();
-      throw new Error("Extension context invalidated");
+      throw new Error("Extension context invalidated", { cause: error });
     }
     throw error;
   }
@@ -1896,7 +2198,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
         </label>
         <div class="bt-selection-result-container">
           <div class="bt-selection-text-container bt-selection-content-style">
-            <button class="bt-speak-btn bt-speak-source" title="Listen">
+            <button class="bt-speak-btn bt-speak-source" title="${i18n.t("selection.listen")}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                 <path class="bt-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
@@ -1918,7 +2220,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
         </label>
         <div class="bt-selection-result-container">
           <div class="bt-selection-text-container bt-selection-content-style">
-            <button class="bt-speak-btn bt-speak-target" title="Listen">
+            <button class="bt-speak-btn bt-speak-target" title="${i18n.t("selection.listen")}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                 <path class="bt-wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
@@ -1959,7 +2261,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
         <!-- Provider selector or label will be injected here -->
       </div>
     </div>
-    <div class="bt-selection-resize-handle" title="Resize">
+    <div class="bt-selection-resize-handle" title="${i18n.t("selection.resize")}">
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M9 1L1 9M9 5L5 9M9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
@@ -2045,7 +2347,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
     selectionPopup = popup;
 
     // Store selectionRect for later use in readjustment
-    popup._selectionRect = selectionRect;
+    popup.selectionRect = selectionRect;
 
     // Ensure popup stays within viewport bounds after positioning
     ensurePopupInViewport(popup, selectionRect);
@@ -2091,16 +2393,8 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
     }
 
     // Populate selectors
-    populateLanguageSelector(
-      popup.querySelector(".bt-selection-source-select"),
-      defaultSource,
-      true,
-    );
-    populateLanguageSelector(
-      popup.querySelector(".bt-selection-target-select"),
-      defaultTarget,
-      false,
-    );
+    populateLanguageSelector(popup.querySelector(".bt-selection-source-select"), defaultSource, true);
+    populateLanguageSelector(popup.querySelector(".bt-selection-target-select"), defaultTarget, false);
 
     // Initial translation
     translateSelectionWithSource(text, defaultSource, popup, null, defaultTarget);
@@ -2113,7 +2407,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
     popup.querySelector(".bt-selection-source-select").addEventListener("change", (e) => {
       const providerSelect = popup.querySelector(".bt-selection-provider-select");
       const providerId = providerSelect ? providerSelect.value : null;
-      const targetLang = popup.querySelector(".bt-selection-target-select").value;
+      const currentTargetLang = popup.querySelector(".bt-selection-target-select").value;
 
       // Save preference
       try {
@@ -2127,7 +2421,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
         console.log("LinguaKit: Error saving source preference:", error.message);
       }
 
-      translateSelectionWithSource(text, e.target.value, popup, providerId, targetLang);
+      translateSelectionWithSource(text, e.target.value, popup, providerId, currentTargetLang);
     });
 
     popup.querySelector(".bt-selection-target-select").addEventListener("change", (e) => {
@@ -2156,8 +2450,8 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
     if (providerSelect) {
       providerSelect.addEventListener("change", (e) => {
         const sourceLang = popup.querySelector(".bt-selection-source-select").value;
-        const targetLang = popup.querySelector(".bt-selection-target-select").value;
-        translateSelectionWithSource(text, sourceLang, popup, e.target.value, targetLang);
+        const currentTargetLang = popup.querySelector(".bt-selection-target-select").value;
+        translateSelectionWithSource(text, sourceLang, popup, e.target.value, currentTargetLang);
       });
     }
 
@@ -2165,8 +2459,8 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
     popup.querySelectorAll("[data-task]").forEach((btn) => {
       btn.addEventListener("click", (_e) => {
         const task = btn.dataset.task;
-        const providerSelect = popup.querySelector(".bt-selection-provider-select");
-        const providerId = providerSelect ? providerSelect.value : null;
+        const currentProviderSelect = popup.querySelector(".bt-selection-provider-select");
+        const providerId = currentProviderSelect ? currentProviderSelect.value : null;
 
         // Force AI provider for smart tasks if currently using Google Translate
         let effectiveProviderId = providerId;
@@ -2174,7 +2468,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
           const aiProvider = settings.providers?.find((p) => p.type !== "google-translate");
           if (aiProvider) {
             effectiveProviderId = aiProvider.id;
-            if (providerSelect) providerSelect.value = aiProvider.id;
+            if (currentProviderSelect) currentProviderSelect.value = aiProvider.id;
           } else {
             showToast(i18n.t("toast.aiProviderRequired"));
             return;
@@ -2188,9 +2482,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
     // Copy buttons
     const copyBtnTarget = popup.querySelector(".bt-selection-translated .bt-selection-copy-btn");
     copyBtnTarget.addEventListener("click", async () => {
-      const textToCopy = popup.querySelector(
-        ".bt-selection-translated .bt-selection-text-content",
-      ).textContent;
+      const textToCopy = popup.querySelector(".bt-selection-translated .bt-selection-text-content").textContent;
       if (!textToCopy || textToCopy === i18n.t("dialog.translating")) return;
 
       try {
@@ -2204,9 +2496,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
 
     const copyBtnOriginal = popup.querySelector(".bt-selection-original .bt-selection-copy-btn");
     copyBtnOriginal.addEventListener("click", async () => {
-      const textToCopy = popup.querySelector(
-        ".bt-selection-original .bt-selection-text-content",
-      ).textContent;
+      const textToCopy = popup.querySelector(".bt-selection-original .bt-selection-text-content").textContent;
       if (!textToCopy) return;
 
       try {
@@ -2240,15 +2530,13 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
       const btn = e.currentTarget;
       if (btn.classList.contains("bt-speak-loading")) return;
 
-      const targetLang = popup.querySelector(".bt-selection-target-select").value;
-      const textToSpeak = popup.querySelector(
-        ".bt-selection-translated .bt-selection-text-content",
-      ).textContent;
+      const currentTargetLang = popup.querySelector(".bt-selection-target-select").value;
+      const textToSpeak = popup.querySelector(".bt-selection-translated .bt-selection-text-content").textContent;
 
       if (textToSpeak && textToSpeak !== i18n.t("dialog.translating")) {
         btn.classList.add("bt-speak-loading");
         try {
-          await tts.play(textToSpeak, targetLang);
+          await tts.play(textToSpeak, currentTargetLang);
         } catch (err) {
           console.error("TTS Error:", err);
         } finally {
@@ -2264,17 +2552,6 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
     }
   }
 }
-
-// Exposed for OCR integration
-window.showSelectionPopupWithText = async function (text, rect) {
-  const cleanText = String(text || "").trim();
-  if (!cleanText) {
-    throw new Error("OCR text is empty");
-  }
-
-  const selectionRect = normalizeOcrRect(rect);
-  await showTranslationPopup(selectionRect, cleanText, "bottom");
-};
 
 function hideTranslationPopup() {
   if (selectionPopup) {
@@ -2317,7 +2594,7 @@ async function translateSelectionWithSource(
     translatedDiv.textContent = text;
     translatedDiv.classList.remove("bt-loading-text");
     // Readjust popup position after content change
-    setTimeout(() => ensurePopupInViewport(popup, popup._selectionRect), 50);
+    setTimeout(() => ensurePopupInViewport(popup, popup.selectionRect), 50);
     return;
   }
 
@@ -2342,12 +2619,12 @@ async function translateSelectionWithSource(
     }
 
     // Readjust popup position after content is loaded
-    setTimeout(() => ensurePopupInViewport(popup, popup._selectionRect), 50);
+    setTimeout(() => ensurePopupInViewport(popup, popup.selectionRect), 50);
   } catch (err) {
     translatedDiv.textContent = "Error: " + err.message;
     translatedDiv.classList.remove("bt-loading-text");
     // Readjust popup position even on error
-    setTimeout(() => ensurePopupInViewport(popup, popup._selectionRect), 50);
+    setTimeout(() => ensurePopupInViewport(popup, popup.selectionRect), 50);
   }
 }
 
@@ -2469,8 +2746,6 @@ function makeDraggable(element, handle) {
     pos3 = 0,
     pos4 = 0;
 
-  handle.onmousedown = dragMouseDown;
-
   function dragMouseDown(e) {
     e = e || window.event;
     // Only allow left click
@@ -2491,9 +2766,8 @@ function makeDraggable(element, handle) {
     // Get the mouse cursor position at startup
     pos3 = e.clientX;
     pos4 = e.clientY;
-    document.onmouseup = closeDragElement;
-    // Call a function whenever the cursor moves
-    document.onmousemove = elementDrag;
+    document.addEventListener("mouseup", closeDragElement);
+    document.addEventListener("mousemove", elementDrag);
   }
 
   function elementDrag(e) {
@@ -2514,9 +2788,11 @@ function makeDraggable(element, handle) {
 
   function closeDragElement() {
     // Stop moving when mouse button is released
-    document.onmouseup = null;
-    document.onmousemove = null;
+    document.removeEventListener("mouseup", closeDragElement);
+    document.removeEventListener("mousemove", elementDrag);
   }
+
+  handle.addEventListener("mousedown", dragMouseDown);
 }
 
 function makeResizable(element, handle) {
@@ -2594,11 +2870,7 @@ function registerHoverTranslate() {
 
       const key = settings.hoverModifierKey || "ctrl";
 
-      if (
-        (key === "ctrl" && e.ctrlKey) ||
-        (key === "shift" && e.shiftKey) ||
-        (key === "alt" && e.altKey)
-      ) {
+      if ((key === "ctrl" && e.ctrlKey) || (key === "shift" && e.shiftKey) || (key === "alt" && e.altKey)) {
         hoverModifierPressed = true;
         document.body.classList.add("bt-hover-translate-active");
 
@@ -2658,11 +2930,7 @@ function registerHoverTranslate() {
       const settings = await getSettings();
       const key = settings.hoverModifierKey || "ctrl";
 
-      if (
-        (key === "ctrl" && !e.ctrlKey) ||
-        (key === "shift" && !e.shiftKey) ||
-        (key === "alt" && !e.altKey)
-      ) {
+      if ((key === "ctrl" && !e.ctrlKey) || (key === "shift" && !e.shiftKey) || (key === "alt" && !e.altKey)) {
         hoverModifierPressed = false;
         document.body.classList.remove("bt-hover-translate-active");
         // clearAllHoverTranslations(); // Don't clear on key release
@@ -2834,8 +3102,7 @@ function findTranslatableElement(target) {
               // If this would take us beyond boundary, return boundary instead
               if (
                 boundary &&
-                (element.parentElement === boundary.parentElement ||
-                  !boundary.contains(element.parentElement))
+                (element.parentElement === boundary.parentElement || !boundary.contains(element.parentElement))
               ) {
                 return boundary;
               }
@@ -2887,12 +3154,7 @@ async function handleHoverTranslate(element, settings) {
   }
 
   // Log parent element info for debugging
-  console.log(
-    "[Hover] Target:",
-    element.tagName,
-    "Granularity:",
-    settings.hoverTranslateGranularity || "line",
-  );
+  console.log("[Hover] Target:", element.tagName, "Granularity:", settings.hoverTranslateGranularity || "line");
 
   // Get granularity setting (default: 'line')
   const granularity = settings.hoverTranslateGranularity || "line";
@@ -3143,115 +3405,4 @@ function applyHoverCustomStyles(style) {
   root.style.setProperty("--bt-hover-text-color", style.textColor || "#ffffff");
   root.style.setProperty("--bt-hover-font-size", style.fontSize || "0.95em");
   root.style.setProperty("--bt-hover-show-icon", style.showIcon !== false ? "inline" : "none");
-}
-
-function registerHoverToggleShortcut() {
-  if (!isTopFrame()) return;
-
-  document.addEventListener(
-    "keydown",
-    async (e) => {
-      const settings = await getSettings();
-      const shortcut = settings.hoverToggleShortcut || {
-        key: "O",
-        ctrl: true,
-        shift: true,
-        alt: false,
-      };
-
-      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-      const modifierKey = isMac ? e.metaKey : e.ctrlKey;
-
-      const matches =
-        e.key.toUpperCase() === shortcut.key.toUpperCase() &&
-        modifierKey === shortcut.ctrl &&
-        e.shiftKey === shortcut.shift &&
-        e.altKey === shortcut.alt;
-
-      if (matches) {
-        e.preventDefault();
-        e.stopPropagation();
-        await toggleHoverDomainForCurrentUrl();
-      }
-    },
-    true,
-  );
-}
-
-async function toggleHoverDomainForCurrentUrl() {
-  try {
-    const settings = await getSettings();
-
-    if (!settings.hoverTranslateDomains) {
-      settings.hoverTranslateDomains = [];
-    }
-
-    const matchingDomainIndex = findDomainIndexForCurrentLocation(settings.hoverTranslateDomains);
-
-    // If global setting is disabled, enable it and FORCE enable the domain
-    if (!settings.hoverTranslateEnabled) {
-      settings.hoverTranslateEnabled = true;
-
-      if (matchingDomainIndex !== -1) {
-        // Force enable if it exists
-        settings.hoverTranslateDomains[matchingDomainIndex].enabled = true;
-      }
-      // If it doesn't exist, it will be added below
-    } else if (matchingDomainIndex !== -1) {
-      // Global is already on, so we just toggle the domain
-      settings.hoverTranslateDomains[matchingDomainIndex].enabled =
-        !settings.hoverTranslateDomains[matchingDomainIndex].enabled;
-    }
-
-    if (matchingDomainIndex === -1) {
-      // Auto-add domain
-      const domain = extractDomainFromUrl(window.location.href);
-
-      settings.hoverTranslateDomains.push({
-        domain: domain,
-        enabled: true,
-      });
-
-      try {
-        await safeRuntimeCall(() =>
-          chrome.runtime.sendMessage({
-            type: "set-settings",
-            settings: settings,
-          }),
-        );
-      } catch (error) {
-        console.log("LinguaKit: Error saving hover domain settings:", error.message);
-        return;
-      }
-
-      showToastBottomRight(`✨ Hover translate enabled for ${domain}`);
-      return;
-    }
-
-    // Get the domain object
-    const domain = settings.hoverTranslateDomains[matchingDomainIndex];
-
-    try {
-      await safeRuntimeCall(() =>
-        chrome.runtime.sendMessage({
-          type: "set-settings",
-          settings: settings,
-        }),
-      );
-    } catch (error) {
-      console.log("LinguaKit: Error updating hover domain settings:", error.message);
-      return;
-    }
-
-    const status = domain.enabled ? "✨ Hover translate enabled" : "Hover translate disabled";
-
-    showToastBottomRight(`${status} for ${domain.domain}`);
-
-    if (!domain.enabled) {
-      clearAllHoverTranslations();
-    }
-  } catch (err) {
-    console.error("Toggle hover domain error:", err);
-    showToast("Error toggling hover domain");
-  }
 }

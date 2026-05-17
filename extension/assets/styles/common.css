@@ -27,6 +27,14 @@
     background-color: var(--bt-color-primary-background-interactive);
   }
 
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(0.5);
+    transform: none;
+    pointer-events: none;
+  }
+
   &.bt-cancel,
   &#clear {
     border-color: var(--bt-color-danger-border);
@@ -43,4 +51,20 @@
       background-color: var(--bt-color-danger-background-interactive);
     }
   }
+}
+
+/* Google Translate UI Cleanup */
+.skiptranslate,
+#goog-gt-tt,
+.goog-te-banner-frame,
+.goog-te-balloon-frame {
+  display: none !important;
+}
+
+body {
+  top: 0 !important;
+}
+
+.lk-translated .skiptranslate {
+  display: none !important;
 }

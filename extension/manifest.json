@@ -31,25 +31,22 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": [
-        "src/content-script-granularity.js",
-        "src/content-script-capture.js",
-        "src/content-script.js"
-      ],
+      "js": ["src/content-script-granularity.js", "src/content-script.js"],
       "css": [
         "assets/styles/inline-suggestion.css",
         "assets/styles/selection.css",
-        "assets/styles/hover-translate.css"
+        "assets/styles/hover-translate.css",
+        "assets/styles/page-translate.css"
       ],
       "run_at": "document_idle",
       "all_frames": true
     }
   ],
-  "permissions": ["storage", "offscreen", "activeTab"],
+  "permissions": ["storage", "offscreen", "activeTab", "scripting"],
   "host_permissions": ["<all_urls>", "http://localhost/*", "http://127.0.0.1/*"],
   "web_accessible_resources": [
     {
-      "resources": ["assets/icons/*", "assets/styles/*", "pages/*", "src/*"],
+      "resources": ["assets/icons/*", "assets/styles/*", "pages/*", "src/*", "src/page-translate.js"],
       "matches": ["<all_urls>"]
     }
   ]

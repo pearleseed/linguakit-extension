@@ -54,10 +54,7 @@ class TranslationProvider {
         basePrompt = TONE_CASUAL_PROMPT;
         break;
       default:
-        basePrompt = DEFAULT_SYSTEM_PROMPT.replace("{sourceLang}", sourceLang).replace(
-          "{targetLang}",
-          targetLang,
-        );
+        basePrompt = DEFAULT_SYSTEM_PROMPT.replace("{sourceLang}", sourceLang).replace("{targetLang}", targetLang);
     }
 
     if (this.customPrompt && this.customPrompt.trim()) {
@@ -121,9 +118,7 @@ class GoogleTranslateProvider extends TranslationProvider {
     // Google Translate is only for translation.
     // If task is not translate, we should warn or handle it.
     if (task !== "translate") {
-      throw new Error(
-        `Google Translate does not support task: ${task}. Please use an AI provider.`,
-      );
+      throw new Error(`Google Translate does not support task: ${task}. Please use an AI provider.`);
     }
 
     // Google Translate uses ISO 639-1 codes, 'auto' for auto-detect
