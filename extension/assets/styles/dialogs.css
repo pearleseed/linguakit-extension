@@ -3,6 +3,7 @@
 
 .bt-toast {
   all: initial;
+  will-change: transform, opacity;
   box-sizing: border-box;
   display: grid;
   z-index: 9999999999;
@@ -81,6 +82,7 @@
 /* Modern Notification Toast */
 .bt-toast-notify {
   all: initial;
+  will-change: transform, opacity;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -217,6 +219,7 @@
 
 /* Inline Suggestion */
 .bt-inline-suggestion {
+  background: #ffffff; /* Fallback background */
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(4px);
   border: 1px solid #e5e7eb;
@@ -263,6 +266,29 @@
   line-height: 1.5;
   word-break: break-word;
   white-space: pre-wrap; /* Allow wrapping */
+  max-height: 120px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+}
+
+/* Custom Scrollbar for Inline Suggestion Text */
+.bt-suggestion-text::-webkit-scrollbar {
+  width: 6px;
+  display: block;
+}
+
+.bt-suggestion-text::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bt-suggestion-text::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.4);
+  border-radius: 9999px;
+}
+
+.bt-suggestion-text::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.6);
 }
 
 .bt-suggestion-footer {

@@ -1,14 +1,34 @@
+/**
+ * LinguaKit Text-to-Speech (TTS) Service. Manages runtime communication with the background worker and offscreen
+ * context to trigger speech synthesis on highlighted or translated text.
+ *
+ * @file Tts.js
+ */
+
+/**
+ * Frontend class for coordinating text-to-speech audio requests.
+ *
+ * @class TTSService
+ */
 export class TTSService {
+  /** @class */
   constructor() {
+    /** @type {HTMLAudioElement} audio - Local Audio API object instance. */
     this.audio = new Audio();
+
+    /** @type {string | null} currentUrl - Active audio stream url source. */
     this.currentUrl = null;
   }
 
   /**
-   * Play TTS for the given text and language
-   * @param {string} text - Text to speak
-   * @param {string} lang - Language code (e.g., 'en', 'vi')
-   * @param {number} speed - Speed (0.24 to 4), default 1 (normal)
+   * Play TTS for the given text and language Sends standard play requests down the chrome extension background message
+   * channel.
+   *
+   * @async
+   * @param {string} text - Text to speak.
+   * @param {string} lang - ISO 639-1 language code configuration (e.g., 'en', 'vi').
+   * @param {number} [speed=1] - Playback speed rate coefficient (value ranges from 0.24 to 4). Default is `1`
+   * @returns {Promise<void>} Resolves when audio play command is dispatched successfully.
    */
   async play(text, lang, speed = 1) {
     if (!text) return;
@@ -39,10 +59,21 @@ export class TTSService {
     }
   }
 
+  /**
+   * Halts active text-to-speech play stream operations.
+   *
+   * @function stop
+   * @returns {void}
+   */
   stop() {
     // Not easily supported with offscreen fire-and-forget,
     // but we could send a stop message if needed.
   }
 }
 
+/**
+ * Globally exported instance of the Text-to-Speech (TTS) client service.
+ *
+ * @constant {TTSService} Tts
+ */
 export const tts = new TTSService();

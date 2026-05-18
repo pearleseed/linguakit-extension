@@ -1,9 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "LinguaKit",
+  "default_locale": "en",
+  "name": "__MSG_extName__",
   "version": "1.0.0",
-  "description": "Brings instant, AI-powered translation directly to your input fields.",
+  "description": "__MSG_extDescription__",
   "author": "Personal Project",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
   "icons": {
     "16": "assets/icons/icon-16.png",
     "32": "assets/icons/icon-32.png",
@@ -12,7 +16,7 @@
   },
   "action": {
     "default_popup": "pages/popup.html",
-    "default_title": "LinguaKit",
+    "default_title": "__MSG_extName__",
     "default_icon": {
       "16": "assets/icons/icon-16.png",
       "32": "assets/icons/icon-32.png",
@@ -28,11 +32,22 @@
     "service_worker": "src/background.js",
     "type": "module"
   },
+  "commands": {
+    "trigger-ocr-capture": {
+      "suggested_key": {
+        "default": "Alt+Shift+O",
+        "mac": "Alt+Shift+O"
+      },
+      "description": "__MSG_ocrCommandDesc__"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["src/content-script-granularity.js", "src/content-script.js"],
       "css": [
+        "assets/styles/tokens.css",
+        "assets/styles/common.css",
         "assets/styles/inline-suggestion.css",
         "assets/styles/selection.css",
         "assets/styles/hover-translate.css",
@@ -43,10 +58,21 @@
     }
   ],
   "permissions": ["storage", "offscreen", "activeTab", "scripting"],
-  "host_permissions": ["<all_urls>", "http://localhost/*", "http://127.0.0.1/*"],
+  "host_permissions": ["<all_urls>"],
   "web_accessible_resources": [
     {
-      "resources": ["assets/icons/*", "assets/styles/*", "pages/*", "src/*", "src/page-translate.js"],
+      "resources": [
+        "assets/icons/icon-19.png",
+        "assets/icons/icon-32.png",
+        "assets/styles/tokens.css",
+        "assets/styles/common.css",
+        "assets/styles/dialogs.css",
+        "src/common/language-map.js",
+        "src/common/i18n.js",
+        "src/common/locales.js",
+        "src/services/tts.js",
+        "src/page-translate.js"
+      ],
       "matches": ["<all_urls>"]
     }
   ]

@@ -1,4 +1,13 @@
+/**
+ * LinguaKit Options and Translator Popup Script. Configures the options menu dynamically by managing domain lists,
+ * aliases, AI providers, custom system prompts, offscreen TTS selections, and persistent user configuration options.
+ * Also manages the immediate sandbox Translator Tab UI interface.
+ *
+ * @file Popup.js
+ */
+
 import { i18n } from "./common/i18n.js";
+import { tts } from "./services/tts.js";
 
 const enabledCheckbox = document.querySelector("#enabled");
 const settingsContainer = document.querySelector("#settings-container");
@@ -88,6 +97,9 @@ const hoverDomainCount = document.getElementById("hover-domain-count");
 const newHoverDomain = document.getElementById("new-hover-domain");
 const addHoverDomain = document.getElementById("add-hover-domain");
 
+const ocrEnabledCheckbox = document.getElementById("ocr-enabled");
+const btnOpenChromeShortcuts = document.getElementById("btn-open-chrome-shortcuts");
+
 let currentAliases = {};
 let currentDomains = [];
 let currentAutoPageDomains = [];
@@ -120,6 +132,13 @@ const LANGUAGES = [
   { code: "th", name: "Thai" },
 ];
 
+/**
+ * Updates the text inside DOM elements marked with custom `data-i18n` and `data-i18n-placeholder` attributes using
+ * localized dictionary mappings from i18n service helper.
+ *
+ * @function translateUI
+ * @returns {void}
+ */
 function translateUI() {
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     el.innerHTML = i18n.t(el.getAttribute("data-i18n"));
@@ -132,6 +151,14 @@ function translateUI() {
   saveBtn.textContent = i18n.t(saveBtn.textContent.includes("✅") ? "popup.saved" : "popup.savePreferences");
 }
 
+/**
+ * Renders a brief premium toast banner notification with dynamic messages.
+ *
+ * @function showToast
+ * @param {string} message - Text information.
+ * @param {string} [type="success"] - CSS class type modifier ('success', 'error'). Default is `"success"`
+ * @returns {void}
+ */
 function showToast(message, type = "success") {
   const existingToast = document.querySelector(".bt-toast");
   if (existingToast) existingToast.remove();
@@ -148,7 +175,12 @@ function showToast(message, type = "success") {
   }, 2500);
 }
 
-// Display version in header
+/**
+ * Reads extension version metadata from chrome manifest and prints it onto the UI header.
+ *
+ * @function displayVersion
+ * @returns {void}
+ */
 function displayVersion() {
   const manifest = chrome.runtime.getManifest();
   const versionEl = document.getElementById("version-display");
@@ -157,6 +189,15 @@ function displayVersion() {
   }
 }
 
+/**
+ * Copies a text string to user clipboard via HTML5 navigator.clipboard API. Shows status toast indicator upon
+ * completion.
+ *
+ * @async
+ * @function copyToClipboard
+ * @param {string} text - Content plain text string to copy.
+ * @returns {Promise<void>}
+ */
 async function copyToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text);
@@ -167,16 +208,28 @@ async function copyToClipboard(text) {
   }
 }
 
+/**
+ * Fills native and target dropdown select selectors with localized country language mappings.
+ *
+ * @function populateSelects
+ * @returns {void}
+ */
 function populateSelects() {
   const options = LANGUAGES.map(
     (l) => `<option value="${l.code}">${i18n.t("lang." + l.code) || l.name} (${l.code})</option>`,
   ).join("");
 
   [nativeSelect, targetSelect].forEach((select) => {
-    const val = select.value;
-    select.innerHTML = options;
-    if (val) select.value = val;
+    if (select) {
+      const val = select.value;
+      select.innerHTML = options;
+      if (val) select.value = val;
+    }
   });
+
+  if (typeof populateTranslateSelects === "function") {
+    populateTranslateSelects();
+  }
 }
 
 function renderAliases() {
@@ -185,7 +238,7 @@ function renderAliases() {
     const item = document.createElement("div");
     item.className = "bt-alias-item";
     item.innerHTML = `
-      <span><b>${key}</b> → ${value}</span>
+      <span><b>${key}</b> → ${String(value)}</span>
       <button data-key="${key}" class="bt-remove-alias">×</button>
     `;
     aliasListEl.appendChild(item);
@@ -196,7 +249,7 @@ function renderAliases() {
       const key = e.target.dataset.key;
       delete currentAliases[key];
       renderAliases();
-      saveSettings();
+      void saveSettings();
     });
   });
 }
@@ -208,51 +261,72 @@ function renderHistoryList(history) {
     return;
   }
 
-  historyListEl.innerHTML = history
-    .map(
-      (item) => `
-    <div class="bt-history-item" data-id="${item.id}">
-      <div class="bt-history-main">
-        <div class="bt-history-source">${item.source}</div>
-        <div class="bt-history-target">${item.target}</div>
-        <div class="bt-history-meta">
-          <span>${item.sourceLang.toUpperCase()} → ${item.targetLang.toUpperCase()}</span>
-          <span>•</span>
-          <span>${item.provider || "AI"}</span>
-          <span>•</span>
-          <span>${new Date(item.timestamp).toLocaleString()}</span>
+  // Clear existing content
+  historyListEl.innerHTML = "";
+
+  const renderChunk = (startIndex, chunkSize) => {
+    if (!historyListEl) return;
+
+    const chunk = history.slice(startIndex, startIndex + chunkSize);
+    if (chunk.length === 0) return;
+
+    const html = chunk
+      .map(
+        (item) => `
+      <div class="bt-history-item" data-id="${item.id}">
+        <div class="bt-history-main">
+          <div class="bt-history-source">${item.source}</div>
+          <div class="bt-history-target">${item.target}</div>
+          <div class="bt-history-meta">
+            <span>${item.sourceLang.toUpperCase()} → ${item.targetLang.toUpperCase()}</span>
+            <span>•</span>
+            <span>${item.provider || "AI"}</span>
+            <span>•</span>
+            <span>${new Date(item.timestamp).toLocaleString()}</span>
+          </div>
+        </div>
+        <div class="bt-history-actions">
+          <button class="bt-btn-icon btn-copy-history" data-id="${item.id}" title="${i18n.t("popup.copy")}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+          </button>
+          <button class="bt-btn-icon btn-favorite ${item.isFavorite ? "active" : ""}" data-id="${item.id}" title="Favorite">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="${item.isFavorite ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          </button>
+          <button class="bt-btn-icon btn-delete-history" data-id="${item.id}" title="Delete">×</button>
         </div>
       </div>
-      <div class="bt-history-actions">
-        <button class="bt-btn-icon btn-copy-history" data-id="${item.id}" title="${i18n.t("popup.copy")}">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
-        </button>
-        <button class="bt-btn-icon btn-favorite ${item.isFavorite ? "active" : ""}" data-id="${item.id}" title="Favorite">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="${item.isFavorite ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        </button>
-        <button class="bt-btn-icon btn-delete-history" data-id="${item.id}" title="Delete">×</button>
-      </div>
-    </div>
-  `,
-    )
-    .join("");
+    `,
+      )
+      .join("");
 
-  // Attach events
-  historyListEl.querySelectorAll(".btn-favorite").forEach((btn) => {
-    btn.addEventListener("click", (_e) => toggleFavorite(btn.dataset.id));
-  });
+    historyListEl.insertAdjacentHTML("beforeend", html);
 
-  historyListEl.querySelectorAll(".btn-copy-history").forEach((btn) => {
-    btn.addEventListener("click", (_e) => {
-      const id = btn.dataset.id;
-      const item = enrichedHistory.find((h) => h.id === id);
-      if (item) copyToClipboard(item.target);
+    // Attach event listeners to new elements
+    const chunkItems = historyListEl.querySelectorAll(`.bt-history-item[data-id]`);
+    chunkItems.forEach((el) => {
+      if (el.dataset.listenersAttached) return;
+      el.dataset.listenersAttached = "true";
+
+      const id = el.dataset.id;
+      el.querySelector(".btn-favorite")?.addEventListener("click", () => {
+        void toggleFavorite(id);
+      });
+      el.querySelector(".btn-copy-history")?.addEventListener("click", () => {
+        const item = enrichedHistory.find((h) => h.id === id);
+        if (item) void copyToClipboard(item.target);
+      });
+      el.querySelector(".btn-delete-history")?.addEventListener("click", () => {
+        void deleteHistoryItem(id);
+      });
     });
-  });
 
-  historyListEl.querySelectorAll(".btn-delete-history").forEach((btn) => {
-    btn.addEventListener("click", (_e) => deleteHistoryItem(btn.dataset.id));
-  });
+    if (startIndex + chunkSize < history.length) {
+      setTimeout(() => renderChunk(startIndex + chunkSize, chunkSize), 16);
+    }
+  };
+
+  // Render first chunk immediately
+  renderChunk(0, 10);
 }
 
 let enrichedHistory = [];
@@ -279,39 +353,62 @@ function renderFavoritesList(favorites) {
     return;
   }
 
-  favoritesListEl.innerHTML = favorites
-    .map(
-      (item) => `
-    <div class="bt-history-item">
-      <div class="bt-history-main">
-        <div class="bt-history-source">${item.source}</div>
-        <div class="bt-history-target">${item.target}</div>
-        <div class="bt-history-meta">
-          <span>${item.sourceLang.toUpperCase()} → ${item.targetLang.toUpperCase()}</span>
+  // Clear existing content
+  favoritesListEl.innerHTML = "";
+
+  const renderFavChunk = (startIndex, chunkSize) => {
+    if (!favoritesListEl) return;
+
+    const chunk = favorites.slice(startIndex, startIndex + chunkSize);
+    if (chunk.length === 0) return;
+
+    const html = chunk
+      .map(
+        (item) => `
+      <div class="bt-history-item" data-id="${item.id}">
+        <div class="bt-history-main">
+          <div class="bt-history-source">${item.source}</div>
+          <div class="bt-history-target">${item.target}</div>
+          <div class="bt-history-meta">
+            <span>${item.sourceLang.toUpperCase()} → ${item.targetLang.toUpperCase()}</span>
+          </div>
+        </div>
+        <div class="bt-history-actions">
+          <button class="bt-btn-icon btn-copy-favorite" data-id="${item.id}" title="${i18n.t("popup.copy")}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+          </button>
+          <button class="bt-btn-icon btn-remove-favorite" data-id="${item.id}" title="Remove">×</button>
         </div>
       </div>
-      <div class="bt-history-actions">
-        <button class="bt-btn-icon btn-copy-favorite" data-id="${item.id}" title="${i18n.t("popup.copy")}">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
-        </button>
-        <button class="bt-btn-icon btn-remove-favorite" data-id="${item.id}" title="Remove">×</button>
-      </div>
-    </div>
-  `,
-    )
-    .join("");
+    `,
+      )
+      .join("");
 
-  favoritesListEl.querySelectorAll(".btn-copy-favorite").forEach((btn) => {
-    btn.addEventListener("click", (_e) => {
-      const id = btn.dataset.id;
-      const item = favorites.find((f) => f.id === id);
-      if (item) copyToClipboard(item.target);
+    favoritesListEl.insertAdjacentHTML("beforeend", html);
+
+    // Attach event listeners to new elements
+    const chunkItems = favoritesListEl.querySelectorAll(`.bt-history-item[data-id]`);
+    chunkItems.forEach((el) => {
+      if (el.dataset.listenersAttached) return;
+      el.dataset.listenersAttached = "true";
+
+      const id = el.dataset.id;
+      el.querySelector(".btn-copy-favorite")?.addEventListener("click", () => {
+        const item = favorites.find((f) => f.id === id);
+        if (item) void copyToClipboard(item.target);
+      });
+      el.querySelector(".btn-remove-favorite")?.addEventListener("click", () => {
+        void removeFavorite(id);
+      });
     });
-  });
 
-  favoritesListEl.querySelectorAll(".btn-remove-favorite").forEach((btn) => {
-    btn.addEventListener("click", (_e) => removeFavorite(btn.dataset.id));
-  });
+    if (startIndex + chunkSize < favorites.length) {
+      setTimeout(() => renderFavChunk(startIndex + chunkSize, chunkSize), 16);
+    }
+  };
+
+  // Render first chunk immediately
+  renderFavChunk(0, 10);
 }
 
 async function toggleFavorite(id) {
@@ -330,7 +427,7 @@ async function toggleFavorite(id) {
   }
 
   await chrome.storage.local.set({ favorites });
-  loadHistory();
+  void loadHistory();
 }
 
 async function deleteHistoryItem(id) {
@@ -338,7 +435,7 @@ async function deleteHistoryItem(id) {
   let history = data.translationHistory || [];
   history = history.filter((h) => h.id !== id);
   await chrome.storage.local.set({ translationHistory: history });
-  loadHistory();
+  void loadHistory();
 }
 
 async function removeFavorite(id) {
@@ -346,7 +443,7 @@ async function removeFavorite(id) {
   let favorites = data.favorites || [];
   favorites = favorites.filter((f) => f.id !== id);
   await chrome.storage.local.set({ favorites });
-  loadHistory();
+  void loadHistory();
 }
 
 // Clear History with event delegation for robustness
@@ -387,7 +484,7 @@ function renderDomains() {
         currentDomains[idx][el.type === "checkbox" ? "enabled" : "position"] =
           el.type === "checkbox" ? e.target.checked : e.target.value;
       }
-      saveSettings();
+      void saveSettings();
     });
   });
 }
@@ -415,7 +512,7 @@ function renderAutoPageDomains() {
       } else {
         currentAutoPageDomains[idx].enabled = e.target.checked;
       }
-      saveSettings();
+      void saveSettings();
     });
   });
 }
@@ -464,7 +561,7 @@ function renderProviderList() {
     btn.addEventListener("click", (e) => {
       activeProviderId = e.target.dataset.id;
       renderProviderList();
-      saveSettings();
+      void saveSettings();
     });
   });
 
@@ -476,7 +573,7 @@ function renderProviderList() {
           activeProviderId = "google-translate";
         }
         renderProviderList();
-        saveSettings();
+        void saveSettings();
       }
     });
   });
@@ -542,16 +639,6 @@ function renderFormFields(type, config = {}) {
     `,
     );
   }
-
-  // Security Note
-  formDynamicFields.insertAdjacentHTML(
-    "beforeend",
-    `
-    <div class="bt-security-note">
-      <span class="bt-icon-shield">🛡️</span> ${i18n.t("popup.securityNote")}
-    </div>
-  `,
-  );
 }
 
 function openProviderForm(provider = null) {
@@ -645,7 +732,7 @@ function saveProviderFromForm() {
     showToast(i18n.t("popup.providerAdded"), "success");
   }
 
-  saveSettings();
+  void saveSettings();
   renderProviderList();
   closeProviderForm();
 }
@@ -715,7 +802,7 @@ function renderTTSProviderList() {
     btn.addEventListener("click", (e) => {
       activeTTSProviderId = e.target.dataset.id;
       renderTTSProviderList();
-      saveSettings();
+      void saveSettings();
     });
   });
 
@@ -727,7 +814,7 @@ function renderTTSProviderList() {
           activeTTSProviderId = "google-tts";
         }
         renderTTSProviderList();
-        saveSettings();
+        void saveSettings();
       }
     });
   });
@@ -783,7 +870,7 @@ function saveTTSProviderFromForm() {
     });
   }
 
-  saveSettings();
+  void saveSettings();
   renderTTSProviderList();
   closeTTSProviderForm();
 }
@@ -860,6 +947,52 @@ function updateAutoPageShortcutPreview() {
     .replace("{macShortcut}", macShortcut);
 }
 
+function syncLanguageElements(settings) {
+  const nativeVal = settings.nativeLanguageCode || "vi";
+  const targetVal = settings.targetLanguageCode || "en";
+  const autoDetectVal = settings.useAutoDetect === true;
+
+  if (nativeSelect) nativeSelect.value = nativeVal;
+  if (targetSelect) targetSelect.value = targetVal;
+  if (autoDetect) autoDetect.checked = autoDetectVal;
+
+  if (translateTargetLang) translateTargetLang.value = targetVal;
+  if (translateSourceLang) {
+    if (autoDetectVal) {
+      translateSourceLang.value = "auto";
+    } else {
+      translateSourceLang.value = nativeVal;
+    }
+
+    const autoOption = translateSourceLang.querySelector('option[value="auto"]');
+    if (autoOption) {
+      if (autoDetectVal && lastDetectedLang) {
+        const langName = LANGUAGES.find((l) => l.code === lastDetectedLang)?.name || lastDetectedLang;
+        const localizedLangName = i18n.t("lang." + lastDetectedLang) || langName;
+        const label = i18n.t("popup.detectedLanguageLabel") || "{lang} - Detected";
+        autoOption.textContent = label.replace("{lang}", localizedLangName);
+      } else {
+        autoOption.textContent = i18n.t("popup.detectLanguage") || "Detect language";
+      }
+    }
+  }
+}
+
+async function updateGlobalLanguageSettings(newLangSettings) {
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "get-settings" });
+    if (res?.ok) {
+      const settings = Object.assign({}, res.settings, newLangSettings);
+      await chrome.runtime.sendMessage({
+        type: "set-settings",
+        settings,
+      });
+    }
+  } catch (err) {
+    console.error("LinguaKit: Error updating global language settings:", err);
+  }
+}
+
 async function loadSettings() {
   const res = await chrome.runtime.sendMessage({ type: "get-settings" });
 
@@ -867,18 +1000,12 @@ async function loadSettings() {
 
   if (res?.ok) {
     enabledCheckbox.checked = res.settings.enabled !== false;
-    nativeSelect.value = res.settings.nativeLanguageCode || "vi";
-    targetSelect.value = res.settings.targetLanguageCode || "en";
-
-    const oldValue = res.settings.preferNativeAsSource;
-    const newValue = res.settings.useAutoDetect;
-    if (newValue === undefined && oldValue !== undefined) {
-      autoDetect.checked = !oldValue;
-    } else {
-      autoDetect.checked = newValue === true;
-    }
+    syncLanguageElements(res.settings);
 
     confirmModal.checked = res.settings.showConfirmModal !== false;
+    if (ocrEnabledCheckbox) {
+      ocrEnabledCheckbox.checked = res.settings.ocrEnabled !== false;
+    }
     currentAliases = res.settings.aliases || {};
 
     const lang = res.settings.interfaceLanguage || "vi";
@@ -987,9 +1114,14 @@ async function loadSettings() {
   } else {
     // Defaults
     enabledCheckbox.checked = true;
-    nativeSelect.value = "vi";
-    targetSelect.value = "en";
-    autoDetect.checked = false; // Default: fixed direction
+    if (ocrEnabledCheckbox) {
+      ocrEnabledCheckbox.checked = true;
+    }
+    syncLanguageElements({
+      nativeLanguageCode: "vi",
+      targetLanguageCode: "en",
+      useAutoDetect: false,
+    });
     confirmModal.checked = true;
     currentAliases = {};
 
@@ -1051,6 +1183,15 @@ async function loadSettings() {
   updateSettingsVisibility();
   toggleInstantSettings();
   toggleAutoPageSettings();
+  initTranslateTab();
+
+  // Sync save button display with initial active tab
+  const activeTab = document.querySelector(".bt-tab.active");
+  if (activeTab && (activeTab.dataset.tab === "help" || activeTab.dataset.tab === "translate")) {
+    saveBtn.style.display = "none";
+  } else {
+    saveBtn.style.display = "block";
+  }
 }
 
 async function saveSettings() {
@@ -1060,6 +1201,7 @@ async function saveSettings() {
     targetLanguageCode: targetSelect.value,
     useAutoDetect: autoDetect.checked,
     showConfirmModal: confirmModal.checked,
+    ocrEnabled: ocrEnabledCheckbox ? ocrEnabledCheckbox.checked : true,
     aliases: currentAliases,
     interfaceLanguage: document.querySelector("#lang-toggle .active").getAttribute("data-lang"),
     instantTranslateEnabled: instantEnabledCheckbox?.checked || false,
@@ -1132,7 +1274,7 @@ addAliasBtn.addEventListener("click", () => {
     aliasKeyInput.value = "";
     aliasValueInput.value = "";
     renderAliases();
-    saveSettings();
+    void saveSettings();
     showToast(i18n.t("popup.aliasAdded"), "success");
   } else {
     showToast(i18n.t("popup.aliasError"), "error");
@@ -1143,13 +1285,19 @@ addAliasBtn.addEventListener("click", () => {
 
 enabledCheckbox.addEventListener("change", () => {
   updateSettingsVisibility();
-  saveSettings();
+  void saveSettings();
 });
 
-nativeSelect.addEventListener("change", saveSettings);
-targetSelect.addEventListener("change", saveSettings);
+nativeSelect.addEventListener("change", () => {
+  void updateGlobalLanguageSettings({ nativeLanguageCode: nativeSelect.value });
+});
+targetSelect.addEventListener("change", () => {
+  void updateGlobalLanguageSettings({ targetLanguageCode: targetSelect.value });
+});
 
-autoDetect.addEventListener("change", saveSettings);
+autoDetect.addEventListener("change", () => {
+  void updateGlobalLanguageSettings({ useAutoDetect: autoDetect.checked });
+});
 confirmModal.addEventListener("change", saveSettings);
 
 const langToggle = document.querySelector("#lang-toggle");
@@ -1164,7 +1312,7 @@ langToggle.addEventListener("click", (e) => {
     renderDomains();
     renderProviderList();
     updateLangToggleUI(lang);
-    saveSettings();
+    void saveSettings();
   }
 });
 
@@ -1181,7 +1329,7 @@ function updateLangToggleUI(lang) {
 if (instantEnabledCheckbox) {
   instantEnabledCheckbox.addEventListener("change", () => {
     toggleInstantSettings();
-    saveSettings();
+    void saveSettings();
   });
 }
 
@@ -1196,7 +1344,7 @@ if (addDomainBtn && newDomainInput) {
       currentDomains.push({ domain, enabled: true, position: "auto" });
       newDomainInput.value = "";
       renderDomains();
-      saveSettings();
+      void saveSettings();
       showToast(i18n.t("popup.domainAdded") || "Domain added successfully", "success");
     } else if (!domain) {
       showToast(i18n.t("popup.domainError"), "error");
@@ -1210,7 +1358,7 @@ if (addDomainBtn && newDomainInput) {
 if (autoPageEnabledCheckbox) {
   autoPageEnabledCheckbox.addEventListener("change", () => {
     toggleAutoPageSettings();
-    saveSettings();
+    void saveSettings();
   });
 }
 
@@ -1221,7 +1369,7 @@ if (addAutoPageDomainBtn && newAutoPageDomainInput) {
       currentAutoPageDomains.push({ domain, enabled: true });
       newAutoPageDomainInput.value = "";
       renderAutoPageDomains();
-      saveSettings();
+      void saveSettings();
       showToast(i18n.t("popup.domainAdded") || "Domain added successfully", "success");
     } else if (!domain) {
       showToast(i18n.t("popup.domainError"), "error");
@@ -1236,21 +1384,21 @@ if (addAutoPageDomainBtn && newAutoPageDomainInput) {
 if (shortcutCtrlCheckbox) {
   shortcutCtrlCheckbox.addEventListener("change", () => {
     updateShortcutPreview();
-    saveSettings();
+    void saveSettings();
   });
 }
 
 if (shortcutShiftCheckbox) {
   shortcutShiftCheckbox.addEventListener("change", () => {
     updateShortcutPreview();
-    saveSettings();
+    void saveSettings();
   });
 }
 
 if (shortcutAltCheckbox) {
   shortcutAltCheckbox.addEventListener("change", () => {
     updateShortcutPreview();
-    saveSettings();
+    void saveSettings();
   });
 }
 
@@ -1270,21 +1418,21 @@ if (shortcutKeyInput) {
 if (autoPageShortcutCtrlCheckbox) {
   autoPageShortcutCtrlCheckbox.addEventListener("change", () => {
     updateAutoPageShortcutPreview();
-    saveSettings();
+    void saveSettings();
   });
 }
 
 if (autoPageShortcutShiftCheckbox) {
   autoPageShortcutShiftCheckbox.addEventListener("change", () => {
     updateAutoPageShortcutPreview();
-    saveSettings();
+    void saveSettings();
   });
 }
 
 if (autoPageShortcutAltCheckbox) {
   autoPageShortcutAltCheckbox.addEventListener("change", () => {
     updateAutoPageShortcutPreview();
-    saveSettings();
+    void saveSettings();
   });
 }
 
@@ -1327,8 +1475,8 @@ document.querySelectorAll(".bt-tab").forEach((tab) => {
     const wrap = document.querySelector(".bt-wrap");
     if (wrap) wrap.scrollLeft = 0;
 
-    // Hide save button on help tab
-    if (tab.dataset.tab === "help") {
+    // Hide save button on help and translate tabs
+    if (tab.dataset.tab === "help" || tab.dataset.tab === "translate") {
       saveBtn.style.display = "none";
     } else {
       // Only show if not in provider form
@@ -1338,7 +1486,7 @@ document.querySelectorAll(".bt-tab").forEach((tab) => {
     }
 
     if (tab.dataset.tab === "auto-page") {
-      updateExportButtonStatus();
+      void updateExportButtonStatus();
     }
   });
 });
@@ -1355,7 +1503,7 @@ function updateCharCounter() {
 if (userCustomPrompt) {
   userCustomPrompt.addEventListener("input", () => {
     updateCharCounter();
-    saveSettings();
+    void saveSettings();
   });
 }
 
@@ -1363,7 +1511,7 @@ if (userCustomPrompt) {
 if (hoverTranslateEnabled) {
   hoverTranslateEnabled.addEventListener("change", () => {
     hoverSettings.hidden = !hoverTranslateEnabled.checked;
-    saveSettings();
+    void saveSettings();
   });
 }
 
@@ -1376,6 +1524,12 @@ if (hoverTextColor) hoverTextColor.addEventListener("change", saveSettings);
 if (hoverMode) hoverMode.addEventListener("change", saveSettings);
 if (hoverGranularity) hoverGranularity.addEventListener("change", saveSettings);
 if (hoverModifier) hoverModifier.addEventListener("change", saveSettings);
+if (ocrEnabledCheckbox) ocrEnabledCheckbox.addEventListener("change", saveSettings);
+if (btnOpenChromeShortcuts) {
+  btnOpenChromeShortcuts.addEventListener("click", () => {
+    chrome.tabs.create({ url: "chrome://extensions/shortcuts" });
+  });
+}
 
 if (manageHoverDomains) {
   manageHoverDomains.addEventListener("click", () => {
@@ -1612,9 +1766,9 @@ if (importFileInput) {
   });
 }
 
-loadSettings();
+void loadSettings();
 displayVersion();
-loadHistory();
+void loadHistory();
 
 async function updateExportButtonStatus() {
   if (!btnExportJson) return;
@@ -1656,5 +1810,373 @@ chrome.runtime.onMessage.addListener((message) => {
 document.addEventListener("input", (e) => {
   if (e.target.classList.contains("bt-input")) {
     e.target.classList.remove("error");
+  }
+});
+
+// --- Translate Tab Controller ---
+
+const translateSourceLang = document.querySelector("#translate-source-lang");
+const translateSourceText = document.querySelector("#translate-source-text");
+const translateClearBtn = document.querySelector("#translate-clear-btn");
+const translateSwapBtn = document.querySelector("#translate-swap-btn");
+const translateTargetLang = document.querySelector("#translate-target-lang");
+const translateTargetText = document.querySelector("#translate-target-text");
+const translateLoader = document.querySelector("#translate-loader");
+const translateTargetActions = document.querySelector("#translate-target-actions");
+const translateCopyBtn = document.querySelector("#translate-copy-btn");
+const translateTtsBtn = document.querySelector("#translate-tts-btn");
+const translateStatusMessage = document.querySelector("#translate-status-message");
+
+let translateDebounceTimeout = null;
+let lastDetectedLang = null;
+
+function populateTranslateSelects() {
+  if (!translateSourceLang || !translateTargetLang) return;
+
+  const sourceOptions = [
+    `<option value="auto">${i18n.t("popup.detectLanguage") || "Detect language"}</option>`,
+    ...LANGUAGES.map((l) => `<option value="${l.code}">${i18n.t("lang." + l.code) || l.name} (${l.code})</option>`),
+  ].join("");
+
+  const targetOptions = LANGUAGES.map(
+    (l) => `<option value="${l.code}">${i18n.t("lang." + l.code) || l.name} (${l.code})</option>`,
+  ).join("");
+
+  translateSourceLang.innerHTML = sourceOptions;
+  translateTargetLang.innerHTML = targetOptions;
+}
+
+function updateClearBtnVisibility() {
+  if (translateClearBtn && translateSourceText) {
+    translateClearBtn.style.display = translateSourceText.value ? "flex" : "none";
+  }
+}
+
+function updateTargetActionsVisibility() {
+  if (translateTargetActions && translateTargetText) {
+    translateTargetActions.style.display = translateTargetText.value.trim() ? "flex" : "none";
+  }
+}
+
+async function saveTranslateState() {
+  if (!translateSourceText || !translateTargetText) return;
+  const state = {
+    sourceText: translateSourceText.value,
+    targetText: translateTargetText.value,
+    lastDetectedLang,
+  };
+  await chrome.storage.local.set({ translateTabState: state });
+}
+
+async function loadTranslateState() {
+  if (!translateSourceLang || !translateTargetLang || !translateSourceText || !translateTargetText) return;
+
+  const data = await chrome.storage.local.get(["translateTabState", "translatorSettings"]);
+  const state = data.translateTabState || {
+    sourceText: "",
+    targetText: "",
+    lastDetectedLang: null,
+  };
+
+  const globalSettings = data.translatorSettings || {};
+  const nativeVal = globalSettings.nativeLanguageCode || "vi";
+  const targetVal = globalSettings.targetLanguageCode || "en";
+  const autoDetectVal = globalSettings.useAutoDetect === true;
+
+  translateTargetLang.value = targetVal;
+  if (autoDetectVal) {
+    translateSourceLang.value = "auto";
+  } else {
+    translateSourceLang.value = nativeVal;
+  }
+
+  translateSourceText.value = state.sourceText || "";
+  translateTargetText.value = state.targetText || "";
+  lastDetectedLang = state.lastDetectedLang || null;
+
+  updateClearBtnVisibility();
+  updateTargetActionsVisibility();
+
+  // If there is text and source Lang was auto, and we had a detected lang, restore the auto label
+  if (state.sourceText && autoDetectVal && lastDetectedLang) {
+    const autoOption = translateSourceLang.querySelector('option[value="auto"]');
+    if (autoOption) {
+      const langName = LANGUAGES.find((l) => l.code === lastDetectedLang)?.name || lastDetectedLang;
+      const localizedLangName = i18n.t("lang." + lastDetectedLang) || langName;
+      const label = i18n.t("popup.detectedLanguageLabel") || "{lang} - Detected";
+      autoOption.textContent = label.replace("{lang}", localizedLangName);
+    }
+  }
+
+  // If sourceText is not empty, run translation to refresh or keep it synced
+  if (translateSourceText.value.trim()) {
+    triggerTranslationImmediate();
+  }
+}
+
+function clearSourceText() {
+  if (translateSourceText) {
+    translateSourceText.value = "";
+    updateClearBtnVisibility();
+    triggerTranslationImmediate();
+  }
+}
+
+function copyTranslation() {
+  if (translateTargetText && translateTargetText.value) {
+    void copyToClipboard(translateTargetText.value);
+  }
+}
+
+function playTranslationTTS() {
+  if (translateTargetText && translateTargetText.value && translateTargetLang) {
+    const text = translateTargetText.value;
+    const lang = translateTargetLang.value;
+    void tts.play(text, lang);
+  }
+}
+
+/**
+ * Swaps the source language value, target language value, and input text content. Triggering immediate re-translation
+ * if text content is present.
+ *
+ * @function swapLanguages
+ * @returns {void}
+ */
+function swapLanguages() {
+  if (!translateSourceLang || !translateTargetLang || !translateSourceText || !translateTargetText) return;
+
+  let src = translateSourceLang.value;
+  let dst = translateTargetLang.value;
+
+  if (src === "auto") {
+    src = dst;
+    dst = lastDetectedLang || "vi";
+    if (src === dst) {
+      dst = "en";
+    }
+  } else {
+    const temp = src;
+    src = dst;
+    dst = temp;
+  }
+
+  translateSourceLang.value = src;
+  translateTargetLang.value = dst;
+
+  // Swap texts
+  const srcText = translateSourceText.value;
+  const dstText = translateTargetText.value;
+
+  translateSourceText.value = dstText;
+  translateTargetText.value = srcText;
+
+  updateClearBtnVisibility();
+  updateTargetActionsVisibility();
+
+  void updateGlobalLanguageSettings({
+    nativeLanguageCode: src,
+    targetLanguageCode: dst,
+    useAutoDetect: false,
+  });
+
+  if (translateSourceText.value.trim()) {
+    triggerTranslationImmediate();
+  } else {
+    translateTargetText.value = "";
+    updateTargetActionsVisibility();
+  }
+}
+
+/**
+ * Sends the input text in the translator sandbox to the background worker API for processing, manages loading
+ * indicators, displays the result, and stores state parameters.
+ *
+ * @async
+ * @function triggerTranslation
+ * @returns {Promise<void>}
+ */
+async function triggerTranslation() {
+  if (
+    !translateSourceText ||
+    !translateTargetText ||
+    !translateSourceLang ||
+    !translateTargetLang ||
+    !translateLoader ||
+    !translateTargetActions ||
+    !translateStatusMessage
+  )
+    return;
+
+  const text = translateSourceText.value;
+
+  if (!text || !text.trim()) {
+    translateTargetText.value = "";
+    translateLoader.style.display = "none";
+    translateTargetActions.style.display = "none";
+    translateStatusMessage.style.display = "none";
+    translateStatusMessage.textContent = "";
+
+    const autoOption = translateSourceLang.querySelector('option[value="auto"]');
+    if (autoOption) {
+      autoOption.textContent = i18n.t("popup.detectLanguage") || "Detect language";
+    }
+
+    void saveTranslateState();
+    return;
+  }
+
+  // Show loader overlay
+  translateLoader.style.display = "flex";
+  translateTargetActions.style.display = "none";
+  translateStatusMessage.style.display = "none";
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "translate",
+      payload: {
+        text: text.trim(),
+        sourceLanguage: translateSourceLang.value,
+        targetLanguage: translateTargetLang.value,
+      },
+    });
+
+    if (response && response.ok && response.result) {
+      const result = response.result;
+      translateTargetText.value = result.translation || "";
+
+      // Handle detected source language label
+      if (translateSourceLang.value === "auto" && result.detectedSourceLanguage) {
+        lastDetectedLang = result.detectedSourceLanguage;
+        const autoOption = translateSourceLang.querySelector('option[value="auto"]');
+        if (autoOption) {
+          const langCode = result.detectedSourceLanguage;
+          const langName = LANGUAGES.find((l) => l.code === langCode)?.name || langCode;
+          const localizedLangName = i18n.t("lang." + langCode) || langName;
+          const label = i18n.t("popup.detectedLanguageLabel") || "{lang} - Detected";
+          autoOption.textContent = label.replace("{lang}", localizedLangName);
+        }
+      } else {
+        const autoOption = translateSourceLang.querySelector('option[value="auto"]');
+        if (autoOption) {
+          autoOption.textContent = i18n.t("popup.detectLanguage") || "Detect language";
+        }
+      }
+
+      translateTargetActions.style.display = "flex";
+    } else {
+      const errMsg = response?.error || i18n.t("popup.errorTranslating") || "Translation failed.";
+      translateStatusMessage.textContent = errMsg;
+      translateStatusMessage.style.display = "block";
+    }
+  } catch (err) {
+    console.error("Translation error in Translate tab:", err);
+    translateStatusMessage.textContent = i18n.t("popup.errorTranslating") || "Translation failed.";
+    translateStatusMessage.style.display = "block";
+  } finally {
+    translateLoader.style.display = "none";
+    void saveTranslateState();
+  }
+}
+
+/**
+ * Automatically translates the text input value, throttled with a 400ms debounce to prevent excessive API quota calls
+ * while typing.
+ *
+ * @function debouncedTranslate
+ * @returns {void}
+ */
+function debouncedTranslate() {
+  clearTimeout(translateDebounceTimeout);
+  updateClearBtnVisibility();
+
+  if (!translateSourceText.value.trim()) {
+    triggerTranslationImmediate();
+    return;
+  }
+
+  translateDebounceTimeout = setTimeout(() => {
+    void triggerTranslation();
+  }, 400); // 400ms debounce
+}
+
+/**
+ * Cancels active typing timeouts and instantly fires a translation query.
+ *
+ * @function triggerTranslationImmediate
+ * @returns {void}
+ */
+function triggerTranslationImmediate() {
+  clearTimeout(translateDebounceTimeout);
+  void triggerTranslation();
+}
+
+/**
+ * Initializes translator tab listeners, populates language options, and recovers cached textbox values.
+ *
+ * @function initTranslateTab
+ * @returns {void}
+ */
+function initTranslateTab() {
+  populateTranslateSelects();
+
+  if (translateSourceText) {
+    translateSourceText.addEventListener("input", debouncedTranslate);
+  }
+
+  if (translateSourceLang) {
+    translateSourceLang.addEventListener("change", () => {
+      const isAuto = translateSourceLang.value === "auto";
+      const update = { useAutoDetect: isAuto };
+      if (!isAuto) {
+        update.nativeLanguageCode = translateSourceLang.value;
+      }
+      void updateGlobalLanguageSettings(update);
+    });
+  }
+
+  if (translateTargetLang) {
+    translateTargetLang.addEventListener("change", () => {
+      void updateGlobalLanguageSettings({ targetLanguageCode: translateTargetLang.value });
+    });
+  }
+
+  if (translateSwapBtn) {
+    translateSwapBtn.addEventListener("click", swapLanguages);
+  }
+
+  if (translateClearBtn) {
+    translateClearBtn.addEventListener("click", clearSourceText);
+  }
+
+  if (translateCopyBtn) {
+    translateCopyBtn.addEventListener("click", copyTranslation);
+  }
+
+  if (translateTtsBtn) {
+    translateTtsBtn.addEventListener("click", playTranslationTTS);
+  }
+
+  void loadTranslateState();
+}
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === "local" && changes.translatorSettings) {
+    const nextSettings = changes.translatorSettings.newValue;
+    const prevSettings = changes.translatorSettings.oldValue || {};
+    if (nextSettings) {
+      const langChanged =
+        nextSettings.nativeLanguageCode !== prevSettings.nativeLanguageCode ||
+        nextSettings.targetLanguageCode !== prevSettings.targetLanguageCode ||
+        nextSettings.useAutoDetect !== prevSettings.useAutoDetect ||
+        nextSettings.activeProviderId !== prevSettings.activeProviderId;
+
+      if (langChanged) {
+        syncLanguageElements(nextSettings);
+        if (translateSourceText && translateSourceText.value.trim()) {
+          triggerTranslationImmediate();
+        }
+      }
+    }
   }
 });

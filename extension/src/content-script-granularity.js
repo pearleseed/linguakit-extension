@@ -1,17 +1,22 @@
 /**
- * Granularity Translation Handlers
- * Handles line-by-line and sentence-by-sentence translation modes
- * Uses Mark-and-Map (Delimiter) Strategy with Wrapper-Based Injection
- * AND Inline Grouping + Markdown-First Strategy to preserve structure
+ * Granularity Translation Handlers. Handles line-by-line and sentence-by-sentence translation modes on active webpages.
+ * Uses a Mark-and-Map (Delimiter) Strategy with Wrapper-Based Injection, along with an Inline Grouping and
+ * Markdown-First Strategy to preserve the layout structure of original text.
+ *
+ * @file Content-script-granularity.js
  */
 
 /**
- * Check if a node is a Block element that should break the group
+ * Check if a DOM node represents a block element that breaks text grouping.
+ *
+ * @function isBlockNode
+ * @param {Node} node - The DOM node to evaluate.
+ * @returns {boolean} True if the node is a block element, false otherwise.
  */
 function isBlockNode(node) {
   if (node.nodeType !== Node.ELEMENT_NODE) return false;
   const tagName = node.tagName.toLowerCase();
-  // Known block tags
+  // Known standard block tags
   return [
     "address",
     "article",
@@ -54,9 +59,11 @@ function isBlockNode(node) {
 }
 
 /**
- * Get Translation Units (Groups of inline nodes)
- * @param {Element} root - Root element
- * @returns {Array<{nodes: Node[], text: string}>}
+ * Parses and returns translation units (groups of sequential inline nodes) from a root element.
+ *
+ * @function getTranslationUnits
+ * @param {Element} root - Root container element to analyze.
+ * @returns {{ nodes: Node[] }[]} List of inline node translation unit groups.
  */
 function getTranslationUnits(root) {
   const units = [];
@@ -74,7 +81,7 @@ function getTranslationUnits(root) {
     // Skip comments
     if (node.nodeType === Node.COMMENT_NODE) continue;
 
-    // Skip our own wrappers
+    // Skip our own injected wrappers
     if (
       node.nodeType === Node.ELEMENT_NODE &&
       (node.hasAttribute("data-linguakit-wrapper") || node.classList.contains("bt-injected-content"))
@@ -118,20 +125,23 @@ function getTranslationUnits(root) {
 }
 
 /**
- * Convert DOM nodes to Markdown (preserving unknown HTML)
- * @param {Node[]} nodes
- * @returns {string}
+ * Custom guillemet character markers used for temporarily escaping '<' and '>' inside text nodes before sending content
+ * to AI translation engines.
+ *
+ * @constant {Object} BRACKET_MARKERS
  */
-// Markers for escaping < and > in text before sending to API
-// Using guillemets « » which are unlikely to appear in code/text
 const BRACKET_MARKERS = {
   LT: "«", // « (U+00AB) - Left-Pointing Double Angle Quotation Mark
   GT: "»", // » (U+00BB) - Right-Pointing Double Angle Quotation Mark
 };
 
 /**
- * Escape < and > in plain text to markers before sending to API
- * This prevents LLM from misinterpreting text like "<0.5%" as HTML tags
+ * Escapes HTML brackets in plain text to custom markers. This prevents LLM translation models from mistaking inline
+ * characters like '<0.5%' for HTML tag definitions.
+ *
+ * @function escapeTextBrackets
+ * @param {string} text - The input plain text string.
+ * @returns {string} The escaped text string.
  */
 function escapeTextBrackets(text) {
   if (!text) return text;
@@ -139,8 +149,11 @@ function escapeTextBrackets(text) {
 }
 
 /**
- * Restore markers back to < and > after receiving translation
- * Then escape them as HTML entities for safe rendering
+ * Restores bracket markers back to safe HTML entity codes. Done after receiving the translated response payload.
+ *
+ * @function restoreAndEscapeBrackets
+ * @param {string} text - The translated text containing markers.
+ * @returns {string} The HTML entity safe string.
  */
 function restoreAndEscapeBrackets(text) {
   if (!text) return text;
@@ -148,9 +161,11 @@ function restoreAndEscapeBrackets(text) {
 }
 
 /**
- * Convert DOM nodes to Markdown (preserving unknown HTML)
- * @param {Node[] | NodeList} nodes
- * @returns {string}
+ * Convert DOM nodes into simplified Markdown representation.
+ *
+ * @function toMarkdown
+ * @param {Node[] | NodeList} nodes - The target DOM elements.
+ * @returns {string} The parsed Markdown string representation.
  */
 function toMarkdown(nodes) {
   let md = "";
@@ -183,10 +198,7 @@ function toMarkdown(nodes) {
           md += `*${childMarkdown}*`;
           break;
         case "code":
-          // For code, we usually want to prevent translation.
-          // Using backticks tells the LLM to ignore it.
-          // We use textContent here because Markdown code blocks don't support internal HTML.
-          // This means we lose syntax highlighting inside inline code, but we protect the code from translation.
+          // For code, we protect the content from translation by putting it inside backticks.
           md += `\`${node.textContent}\``;
           break;
         case "a":
@@ -195,7 +207,6 @@ function toMarkdown(nodes) {
           break;
         default: {
           // For unknown inline tags (span, custom), preserve the wrapper but translate the content.
-          // We reconstruct the start and end tags.
           const tagName = node.tagName.toLowerCase();
           let attrs = "";
           for (const attr of node.attributes) {
@@ -213,20 +224,12 @@ function toMarkdown(nodes) {
 }
 
 /**
- * Escape < and > that are NOT part of valid HTML tags
- * This prevents text like "<0.5%" from being parsed as broken HTML
+ * Escape '<' and '>' that are NOT part of valid HTML tag structures. Prevents plain mathematical operators or emoticon
+ * symbols (e.g. '<3', 'a < b') from corrupting the DOM hierarchy.
  *
- * Cases to handle:
- * - <0.5%, <100, <$50 (numbers, currency)
- * - <=, >=, <>, <-, ->, << , >> (operators/arrows)
- * - <3 (heart emoticon)
- * - a < b, x > y (math comparisons)
- * - <@user>, <#channel> (mentions)
- * - <<<, >>> (multiple brackets)
- *
- * Valid HTML tags to preserve:
- * - <tagname>, </tagname>, <tagname attr="value">
- * - <br>, <hr>, <img src="..."> (self-closing)
+ * @function escapeNonHtmlBrackets
+ * @param {string} text - The raw HTML markup string.
+ * @returns {string} The sanitized HTML markup string.
  */
 function escapeNonHtmlBrackets(text) {
   if (!text) return text;
@@ -245,7 +248,7 @@ function escapeNonHtmlBrackets(text) {
     return placeholder;
   });
 
-  // Step 2: Escape ALL remaining < and >
+  // Step 2: Escape ALL remaining raw brackets
   result = result.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   // Step 3: Restore HTML tags from placeholders
@@ -257,7 +260,11 @@ function escapeNonHtmlBrackets(text) {
 }
 
 /**
- * Convert Markdown back to HTML
+ * Converts Markdown syntactic structure back to formatted HTML tags.
+ *
+ * @function markupHTML
+ * @param {string} text - The input translated Markdown snippet.
+ * @returns {string} The formatted HTML tag string.
  */
 function markupHTML(text) {
   if (!text) return text;
@@ -274,7 +281,7 @@ function markupHTML(text) {
   return (
     processed
       // Bold: **text**
-      .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
+      .replace(/\*\*(.*?)\*\?/g, "<b>$1</b>")
       // Italic: *text*
       .replace(/\*(.*?)\*/g, "<i>$1</i>")
       // Code: `text`
@@ -285,7 +292,21 @@ function markupHTML(text) {
 }
 
 /**
- * Handle line-by-line translation (Wrapper-Based + Block-List Grouping + Markdown)
+ * Handles line-by-line translation tasks on an active webpage element. Splits content into custom translation units,
+ * groups requests with structural delimiters, queries the translation API, and updates wrappers with loading spinner
+ * indicators.
+ *
+ * @async
+ * @function handleLineByLineTranslate
+ * @param {Element} element - The target webpage DOM element.
+ * @param {string} text - The plain text representation.
+ * @param {Object} settings - User settings configuration options.
+ * @param {Function} createPlaceholder - Callback function to construct inline loaders.
+ * @param {Function} updateContent - Callback function to update DOM text content.
+ * @param {Function} requestTranslation - Routing function to send API translation requests.
+ * @param {Map} cache - Local runtime cache dictionary.
+ * @param {Function} _clearAllHoverTranslations - Callback function to purge hover translation history.
+ * @returns {Promise<void>}
  */
 // eslint-disable-next-line no-unused-vars -- called from content-script.js
 async function handleLineByLineTranslate(
@@ -307,7 +328,6 @@ async function handleLineByLineTranslate(
   const units = getTranslationUnits(element);
 
   if (units.length === 0) {
-    console.log("[Granularity] No translation units found");
     return;
   }
 
@@ -330,9 +350,7 @@ async function handleLineByLineTranslate(
     const translationSpan = document.createElement("span");
     translationSpan.setAttribute("data-linguakit-translation", "true");
     translationSpan.className = "bt-loading-indicator";
-    // Use inline display with BR separator as requested
     translationSpan.style.display = "inline";
-    // Modern CSS spinner instead of GIF
     translationSpan.innerHTML = '<span class="bt-spinner"></span>';
 
     // Insert wrapper before first node
@@ -415,6 +433,15 @@ async function handleLineByLineTranslate(
   updateWrappers(wrappers, translatedSegments, settings);
 }
 
+/**
+ * Updates DOM segment wrappers with localized translated strings and style specifications.
+ *
+ * @function updateWrappers
+ * @param {{ wrapper: Element; translationSpan: Element }[]} wrappers - Target segment container list.
+ * @param {string[]} translations - List of translated text segments.
+ * @param {Object} settings - User settings style configurations.
+ * @returns {void}
+ */
 function updateWrappers(wrappers, translations, settings) {
   const textColor = settings.hoverInjectStyle?.textColor || "#ff0000";
   const fontSize = settings.hoverInjectStyle?.fontSize || "0.95em";

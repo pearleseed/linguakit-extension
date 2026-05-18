@@ -1,5 +1,15 @@
 /**
- * Default system prompt for translation with Markdown preservation
+ * LinguaKit AI Translation Provider Orchestration. Defines the translation provider interfaces and individual provider
+ * handlers (such as custom OpenAI API integrations and public Google Translate APIs) to support multi-model
+ * translation, writing style improvement, summarization, and custom tone conversions.
+ *
+ * @file Ai-providers.js
+ */
+
+/**
+ * Standard system instructions used for base translation tasks to protect formatting/Markdown syntax.
+ *
+ * @constant {string} DEFAULT_SYSTEM_PROMPT
  */
 const DEFAULT_SYSTEM_PROMPT = `You are a professional translator. Translate the user's text from {sourceLang} to {targetLang}.
 
@@ -9,33 +19,68 @@ RULES:
 3. Preserve all formatting markers in their original positions.
 4. Return ONLY the translated text with preserved Markdown.`;
 
+/**
+ * System prompt to summarize a text block.
+ *
+ * @constant {string} SUMMARIZE_PROMPT
+ */
 const SUMMARIZE_PROMPT = `You are a professional editor. Summarize the user's text into a concise and clear summary. 
 Maintain the same language as the source. 
 Return ONLY the summary text.`;
 
+/**
+ * System prompt to refine vocabulary and grammar style.
+ *
+ * @constant {string} IMPROVE_PROMPT
+ */
 const IMPROVE_PROMPT = `You are a professional writing assistant. Improve the grammar, clarity, and flow of the user's text. 
 Maintain the original meaning and language. 
 Return ONLY the improved text.`;
 
+/**
+ * System prompt to re-write a message using professional/formal vocabulary.
+ *
+ * @constant {string} TONE_PROFESSIONAL_PROMPT
+ */
 const TONE_PROFESSIONAL_PROMPT = `You are a professional communicator. Rewrite the user's text to be professional, polite, and formal. 
 Maintain the same language. 
 Return ONLY the rewritten text.`;
 
+/**
+ * System prompt to re-write a message using casual/informal vocabulary.
+ *
+ * @constant {string} TONE_CASUAL_PROMPT
+ */
 const TONE_CASUAL_PROMPT = `You are a friendly companion. Rewrite the user's text to be casual, friendly, and conversational. 
 Maintain the same language. 
 Return ONLY the rewritten text.`;
 
 /**
- * Base class for Translation Providers
+ * Abstract base class representing a generic translation engine.
+ *
+ * @class TranslationProvider
  */
 class TranslationProvider {
+  /**
+   * @class
+   * @param {Object} config - Configuration settings for the provider (API keys, models, etc.).
+   * @param {string} [customPrompt=""] - Optional user-defined system prompt overrides. Default is `""`
+   */
   constructor(config, customPrompt = "") {
     this.config = config;
     this.customPrompt = customPrompt;
   }
 
   /**
-   * Build the complete system prompt with custom additions
+   * Constructs the complete system prompt instructions matching the chosen execution task. Append any custom prompts
+   * configured by the user.
+   *
+   * @function buildSystemPrompt
+   * @param {string} sourceLang - The source language name or BCP-47 tag.
+   * @param {string} targetLang - The target language name or BCP-47 tag.
+   * @param {string} [task="translate"] - Operation mode ('translate', 'summarize', 'improve', 'tone-professional',
+   *   'tone-casual'). Default is `"translate"`
+   * @returns {string} The constructed system instructions.
    */
   buildSystemPrompt(sourceLang, targetLang, task = "translate") {
     let basePrompt = "";
@@ -64,15 +109,43 @@ class TranslationProvider {
     return basePrompt;
   }
 
+  /**
+   * Orchestrate raw API calls to translate user text. Must be implemented by subclasses.
+   *
+   * @async
+   * @abstract
+   * @function translate
+   * @param {string} text - The input plain or format text.
+   * @param {string} sourceLang - Source language code.
+   * @param {string} targetLang - Target language code.
+   * @param {string} [task="translate"] - Operation task. Default is `"translate"`
+   * @returns {Promise<Object | string>} Resolved translation payload.
+   * @throws {Error} If method is not overridden.
+   */
   async translate(_text, _sourceLang, _targetLang, _task = "translate") {
     throw new Error("Not implemented");
   }
 }
 
 /**
- * OpenAI Provider
+ * Integrates custom OpenAI compatible API gateway endpoints.
+ *
+ * @class OpenAIProvider
+ * @extends TranslationProvider
  */
 class OpenAIProvider extends TranslationProvider {
+  /**
+   * Sends standard text requests directly to configured OpenAI compatible API endpoints.
+   *
+   * @async
+   * @function translate
+   * @param {string} text - The input plain or format text.
+   * @param {string} sourceLang - Source language code.
+   * @param {string} targetLang - Target language code.
+   * @param {string} [task="translate"] - Operation task. Default is `"translate"`
+   * @returns {Promise<string>} The parsed, translated text from the API.
+   * @override
+   */
   async translate(text, sourceLang, targetLang, task = "translate") {
     const { username, password, model, baseUrl } = this.config;
 
@@ -80,7 +153,7 @@ class OpenAIProvider extends TranslationProvider {
       throw new Error("Missing OpenAI configuration (Endpoint, Model, Username, or Password)");
     }
 
-    // Basic Auth encoding
+    // Basic Auth base-64 encoding
     const auth = btoa(`${username}:${password}`);
     const systemPrompt = this.buildSystemPrompt(sourceLang, targetLang, task);
 
@@ -105,29 +178,41 @@ class OpenAIProvider extends TranslationProvider {
     }
 
     const data = await response.json();
-    // Use system_repsonse as specified by user
+    // Retrieve custom system response mapping returned by the gateway
     return data.system_repsonse?.trim();
   }
 }
 
 /**
- * Google Translate Provider (Free, no API key required)
+ * Free Google Translate web API mapping implementation (requires no API key).
+ *
+ * @class GoogleTranslateProvider
+ * @extends TranslationProvider
  */
 class GoogleTranslateProvider extends TranslationProvider {
+  /**
+   * Fetches standard machine translation text segments from the public Google Translate API.
+   *
+   * @async
+   * @function translate
+   * @param {string} text - The input plain or format text.
+   * @param {string} sourceLang - Source language code.
+   * @param {string} targetLang - Target language code.
+   * @param {string} [task="translate"] - Operation task (restricted to 'translate'). Default is `"translate"`
+   * @returns {Promise<{ translation: string; detectedSourceLang: string | null }>}
+   * @override
+   */
   async translate(text, sourceLang, targetLang, task = "translate") {
-    // Google Translate is only for translation.
-    // If task is not translate, we should warn or handle it.
+    // Google Translate only supports general translation.
     if (task !== "translate") {
       throw new Error(`Google Translate does not support task: ${task}. Please use an AI provider.`);
     }
 
-    // Google Translate uses ISO 639-1 codes, 'auto' for auto-detect
+    // Use ISO-639-1 language codes, or 'auto' for dynamic source detection
     const sl = sourceLang === "auto" ? "auto" : sourceLang.toLowerCase();
     const tl = targetLang.toLowerCase();
 
-    // Encode the text for URL
     const encodedText = encodeURIComponent(text);
-
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&dj=1&sl=${sl}&tl=${tl}&q=${encodedText}`;
 
     const response = await fetch(url, {
@@ -143,34 +228,53 @@ class GoogleTranslateProvider extends TranslationProvider {
 
     const data = await response.json();
 
-    // Parse the response
-    // Response contains a "sentences" array where each item has "trans" field
+    // Parse standard multi-segment translation sentences payload
     if (!data.sentences || !Array.isArray(data.sentences)) {
       throw new Error("Invalid response from Google Translate");
     }
 
-    // Concatenate all translation segments
+    // Concatenate all parsed text segment translations cleanly
     const translation = data.sentences
       .map((sentence) => sentence.trans)
-      .filter((trans) => trans) // Filter out any undefined/null values
+      .filter((trans) => trans) // Filter out any empty items
       .join("");
 
-    return translation;
+    return {
+      translation,
+      detectedSourceLang: data.src || null,
+    };
   }
 }
 
+/**
+ * Main orchestration service that manages active AI models and handles translation requests.
+ *
+ * @class AIProviderService
+ */
 export class AIProviderService {
+  /**
+   * @class
+   * @param {Object} settings - Configuration settings.
+   */
   constructor(settings) {
     this.settings = settings;
     this.activeProviderId = settings.activeProviderId || "google-translate";
     this.providers = settings.providers || [];
     this.customPrompt = settings.customPrompt || "";
 
+    // Resolve initial active provider from configuration lists
     this.activeProvider = this.providers.find((p) => p.id === this.activeProviderId) ||
       this.providers.find((p) => p.id === "google-translate") ||
       this.providers[0] || { type: "google-translate", config: {} };
   }
 
+  /**
+   * Resolves the translation engine provider instance by its config ID.
+   *
+   * @function getProvider
+   * @param {string} [providerId] - ID of the target provider, defaults to active provider.
+   * @returns {OpenAIProvider | GoogleTranslateProvider}
+   */
   getProvider(providerId) {
     let providerData = this.activeProvider;
 
@@ -190,17 +294,44 @@ export class AIProviderService {
     }
   }
 
+  /**
+   * Delegates text translation to the resolved target engine provider.
+   *
+   * @async
+   * @function translate
+   * @param {string} text - The input plain or format text.
+   * @param {string} sourceLang - Source language code.
+   * @param {string} targetLang - Target language code.
+   * @param {string} providerId - ID of the specific provider to use.
+   * @param {string} [task="translate"] - Operation task. Default is `"translate"`
+   * @returns {Promise<{
+   *   translation: string;
+   *   detectedSourceLang: string | null;
+   *   providerName: string;
+   *   providerType: string;
+   * }>}
+   */
   async translate(text, sourceLang, targetLang, providerId, task = "translate") {
     const provider = this.getProvider(providerId);
-    const translation = await provider.translate(text, sourceLang, targetLang, task);
+    const result = await provider.translate(text, sourceLang, targetLang, task);
 
-    // Find the actual provider used for metadata
+    let translation = "";
+    let detectedSourceLang = null;
+
+    if (result && typeof result === "object") {
+      translation = result.translation;
+      detectedSourceLang = result.detectedSourceLang;
+    } else {
+      translation = result;
+    }
+
     const providerData = providerId
       ? this.providers.find((p) => p.id === providerId) || this.activeProvider
       : this.activeProvider;
 
     return {
       translation,
+      detectedSourceLang,
       providerName: providerData.name,
       providerType: providerData.type,
     };

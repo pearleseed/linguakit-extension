@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "LinguaKit",
+    "description": "Tên tiện ích mở rộng"
+  },
+  "extDescription": {
+    "message": "Mang tính năng dịch thuật tức thì, hỗ trợ bởi AI trực tiếp vào các trường nhập liệu của bạn.",
+    "description": "Mô tả của tiện ích mở rộng"
+  },
+  "ocrCommandDesc": {
+    "message": "Kích hoạt chụp và dịch văn bản trên màn hình (OCR)",
+    "description": "Mô tả phím tắt cho tính năng chụp OCR dịch thuật"
+  }
+}

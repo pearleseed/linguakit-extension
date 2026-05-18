@@ -1,7 +1,21 @@
+/**
+ * LinguaKit Main Content Script. Runs in the ISOLATED world context of loaded webpages. Manages textbox editing
+ * detectors (supporting standard textareas, input fields, and rich-text environments such as Facebook Lexical and
+ * Draft.js), listens to instant translation shortcut hotkeys, registers selection and hover modes, injects custom popup
+ * wrappers, and handles offline page snapshot rendering.
+ *
+ * @file Content-script.js
+ */
+
 let normalizeLanguageToCode;
 let i18n;
 let tts;
 
+/**
+ * Regex pattern matching terminal-like translation commands typed at the end of input fields (e.g. '!!en').
+ *
+ * @constant {RegExp} TRANSLATION_COMMAND_PATTERN
+ */
 const TRANSLATION_COMMAND_PATTERN = /!!([a-zA-ZÀ-ÿ-]+)$/i;
 
 let isTranslating = false;
@@ -19,6 +33,12 @@ let selectionIcon = null;
 let selectionPopup = null;
 let selectedText = "";
 
+/**
+ * Verifies if the script runs in the window's main top-level context (excluding iframes).
+ *
+ * @function isTopFrame
+ * @returns {boolean} True if in top frame, false if embedded in iframe.
+ */
 function isTopFrame() {
   try {
     return window.top === window;
@@ -57,7 +77,11 @@ window.addEventListener("unhandledrejection", (event) => {
   }
 });
 
-(async function bootstrap() {
+/**
+ * Self-invoking extension bootstrap orchestrator. Dynamically imports language normalization utilities, i18n
+ * configurations, and TTS clients, binds listener channels, and initializes styling elements.
+ */
+void (async function bootstrap() {
   try {
     if (!isExtensionContextValid()) {
       console.log("LinguaKit: Extension context not available during bootstrap");
@@ -95,26 +119,26 @@ window.addEventListener("unhandledrejection", (event) => {
         }
       })
       .catch((err) => {
-        console.log("LinguaKit: Error initializing i18n:", err.message);
+        console.error("LinguaKit: Error initializing i18n:", err.message);
       });
 
     // Listen for setting changes
     try {
       chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.type === "trigger-page-translate") {
-          getSettings().then((settings) => {
-            autoTranslatePage(settings, true); // Always learn for manual trigger
+          void getSettings().then((settings) => {
+            void autoTranslatePage(settings, true); // Always learn for manual trigger
             sendResponse({ ok: true });
           });
           return true;
         }
 
         if (message.type === "capture-page-cache") {
-          getSettings().then((settings) => {
+          void getSettings().then((settings) => {
             const domain = window.location.hostname;
             const targetLang = settings.targetLanguageCode || "en";
             if (originalTexts.length > 0) {
-              captureAndSavePageCache(domain, targetLang, true).then(() => {
+              void captureAndSavePageCache(domain, targetLang, true).then(() => {
                 sendResponse({ ok: true });
               });
             } else {
@@ -126,7 +150,7 @@ window.addEventListener("unhandledrejection", (event) => {
 
         if (message.type === "apply-page-cache") {
           if (message.payload && message.payload.cache) {
-            applyPageCache(message.payload.cache).then(() => {
+            void applyPageCache(message.payload.cache).then(() => {
               sendResponse({ ok: true });
             });
           }
@@ -137,6 +161,8 @@ window.addEventListener("unhandledrejection", (event) => {
           sendResponse({ isCacheReady: isPageCached });
           return true;
         }
+
+        return false;
       });
 
       chrome.storage.onChanged.addListener(async (changes, namespace) => {
@@ -150,24 +176,86 @@ window.addEventListener("unhandledrejection", (event) => {
               i18n.setLanguage(newSettings.interfaceLanguage);
             }
 
-            // Trigger Auto Page Translate if it was just enabled or a domain was added
+            // Check if language settings or auto-detect settings changed
+            const langSettingsChanged =
+              newSettings.nativeLanguageCode !== oldSettings.nativeLanguageCode ||
+              newSettings.targetLanguageCode !== oldSettings.targetLanguageCode ||
+              newSettings.useAutoDetect !== oldSettings.useAutoDetect ||
+              newSettings.activeProviderId !== oldSettings.activeProviderId;
+
+            // Trigger Auto Page Translate if enabled and active on domain
             const isAutoPageNow = isAutoPageTranslateDomain(newSettings);
             const wasAutoPageBefore = isAutoPageTranslateDomain(oldSettings);
 
-            if (isAutoPageNow && !wasAutoPageBefore) {
-              await autoTranslatePage(newSettings);
+            if (isAutoPageNow && (!wasAutoPageBefore || langSettingsChanged)) {
+              // Clear cache and re-trigger Google Page Translation to the new target language
+              await autoTranslatePage(newSettings, true);
+            }
+
+            // Sync and re-translate active suggestion popup (currentSuggestion)
+            if (currentSuggestion && langSettingsChanged) {
+              const targetSelect = currentSuggestion.element.querySelector(".bt-suggestion-target-select");
+              const sourceSelect = currentSuggestion.element.querySelector(".bt-suggestion-source-select");
+              const providerSelect = currentSuggestion.element.querySelector(".bt-suggestion-provider-select");
+
+              const activeTarget = newSettings.targetLanguageCode || "en";
+              const activeSource = newSettings.useAutoDetect ? "auto" : newSettings.nativeLanguageCode || "en";
+              const activeProvider = newSettings.activeProviderId || "google-translate";
+
+              if (targetSelect) targetSelect.value = activeTarget;
+              if (sourceSelect) sourceSelect.value = activeSource;
+              if (providerSelect) providerSelect.value = activeProvider;
+
+              void reTranslateSuggestion(
+                currentSuggestion.inputElement,
+                currentSuggestion.sourceText,
+                activeProvider,
+                newSettings,
+                activeTarget,
+                activeSource,
+                currentSuggestion,
+              );
+            }
+
+            // Sync and re-translate active selection popup (selectionPopup)
+            if (selectionPopup && langSettingsChanged) {
+              const targetSelect = selectionPopup.querySelector(".bt-selection-target-select");
+              const sourceSelect = selectionPopup.querySelector(".bt-selection-source-select");
+              const providerSelect = selectionPopup.querySelector(".bt-selection-provider-select");
+
+              const activeTarget = newSettings.targetLanguageCode || "en";
+              const activeSource = newSettings.useAutoDetect ? "auto" : newSettings.nativeLanguageCode || "en";
+              const activeProvider = newSettings.activeProviderId || "google-translate";
+
+              if (targetSelect) targetSelect.value = activeTarget;
+              if (sourceSelect) sourceSelect.value = activeSource;
+              if (providerSelect) providerSelect.value = activeProvider;
+
+              void translateSelectionWithSource(
+                selectionPopup.originalText,
+                activeSource,
+                selectionPopup,
+                activeProvider,
+                activeTarget,
+                selectionPopup.activeTask || "translate",
+              );
+            }
+
+            // Clear legacy/outdated hover translation elements to prevent conflicting translation displays
+            if (langSettingsChanged) {
+              document.querySelectorAll(".bt-hover-translation").forEach((el) => el.remove());
             }
           }
         }
       });
     } catch (storageError) {
-      console.log("LinguaKit: Error setting up storage listener:", storageError.message);
+      console.error("LinguaKit: Error setting up storage listener:", storageError.message);
     }
 
     injectGlobalStylesheet();
     registerAutoDetection();
     registerInstantMode();
-    registerAutoPageTranslate();
+    void registerAutoPageTranslate();
     registerSelectionMode();
     registerToggleShortcuts();
     registerInstantLabelIndicator();
@@ -183,10 +271,17 @@ window.addEventListener("unhandledrejection", (event) => {
         return true;
       }
 
+      if (message.type === "initiate-ocr-crop") {
+        const { screenshotUrl } = message.payload;
+        startOcrCrop(screenshotUrl);
+        sendResponse({ ok: true });
+        return true;
+      }
+
       return false;
     });
   } catch (error) {
-    console.log("LinguaKit: Bootstrap failed:", error.message);
+    console.error("LinguaKit: Bootstrap failed:", error.message);
     if (
       error.message.includes("Extension context invalidated") ||
       error.message.includes("Could not establish connection")
@@ -197,6 +292,12 @@ window.addEventListener("unhandledrejection", (event) => {
   }
 })();
 
+/**
+ * Dynamically appends dialog layouts and spinner styles stylesheet link elements onto webpage headers.
+ *
+ * @function injectGlobalStylesheet
+ * @returns {void}
+ */
 function injectGlobalStylesheet() {
   try {
     if (!isExtensionContextValid()) {
@@ -211,7 +312,7 @@ function injectGlobalStylesheet() {
       document.head.appendChild(link);
     }
   } catch (error) {
-    console.log("LinguaKit: Error injecting stylesheet:", error.message);
+    console.error("LinguaKit: Error injecting stylesheet:", error.message);
     if (
       error.message.includes("Extension context invalidated") ||
       error.message.includes("Could not establish connection")
@@ -221,6 +322,14 @@ function injectGlobalStylesheet() {
   }
 }
 
+/**
+ * Determines if a webpage element supports interactive text editing capabilities. Checks for standard input tag
+ * configurations, textareas, and general contenteditable attributes.
+ *
+ * @function isEditableElement
+ * @param {Element} element - The target webpage element.
+ * @returns {boolean} True if editable, false otherwise.
+ */
 function isEditableElement(element) {
   if (!element) return false;
 
@@ -237,6 +346,13 @@ function isEditableElement(element) {
   return false;
 }
 
+/**
+ * Helper utility to traverse shadow DOM containers recursively to find the exact, active element.
+ *
+ * @function getDeepActiveElement
+ * @param {Document | ShadowRoot} [root=document] - Active DOM root layer. Default is `document`
+ * @returns {Element | null} The resolved deep active element.
+ */
 function getDeepActiveElement(root = document) {
   let element = root.activeElement || null;
   while (element?.shadowRoot?.activeElement) {
@@ -245,11 +361,24 @@ function getDeepActiveElement(root = document) {
   return element;
 }
 
+/**
+ * Returns the deeply nested active element if and only if it is editable.
+ *
+ * @function getActiveEditableElement
+ * @returns {Element | null} The editable element, or null.
+ */
 function getActiveEditableElement() {
   const element = getDeepActiveElement();
   return isEditableElement(element) ? element : null;
 }
 
+/**
+ * Parses the contents of an editable input field to locate inline terminal commands matching the pattern '!!{lang}'.
+ *
+ * @function parseFieldTextAndCommand
+ * @param {Element} element - Target editable textbox element.
+ * @returns {Object | null} Payload holding preceding input string and raw parsed language parameters.
+ */
 function parseFieldTextAndCommand(element) {
   if (!element) return null;
 
@@ -270,6 +399,14 @@ function parseFieldTextAndCommand(element) {
   return { text: precedingText, languageRaw };
 }
 
+/**
+ * Asynchronously queries local storage parameters via background API channel. Returns standard configuration layouts if
+ * context invalidations occur.
+ *
+ * @async
+ * @function getSettings
+ * @returns {Promise<Object>} The settings configuration layout structure.
+ */
 async function getSettings() {
   if (!isExtensionContextValid()) {
     // Don't show toast, just return default settings
@@ -300,7 +437,7 @@ async function getSettings() {
       return res.settings;
     }
   } catch (error) {
-    console.log("LinguaKit: Error getting settings:", error.message);
+    console.error("LinguaKit: Error getting settings:", error.message);
     if (
       error.message.includes("Extension context invalidated") ||
       error.message.includes("Could not establish connection")
@@ -437,7 +574,7 @@ function attemptTranslationTrigger(element) {
   if (isTranslating) return;
   const parsed = parseFieldTextAndCommand(element);
   if (!parsed) return;
-  handleAutoTranslation(element, parsed);
+  void handleAutoTranslation(element, parsed);
 }
 
 function resolveTargetLanguage(raw, settings) {
@@ -452,9 +589,35 @@ function resolveTargetLanguage(raw, settings) {
   return normalizeLanguageToCode(raw);
 }
 
+async function saveSuggestionSettings(activeSuggestion, defaultSource, defaultTarget, defaultProv) {
+  try {
+    const settings = await getSettings();
+    const activeSource = activeSuggestion.sourceSelect ? activeSuggestion.sourceSelect.value : defaultSource;
+    const activeTarget = activeSuggestion.targetSelect ? activeSuggestion.targetSelect.value : defaultTarget;
+    const activeProv = activeSuggestion.providerSelect ? activeSuggestion.providerSelect.value : defaultProv;
+
+    const updated = Object.assign({}, settings, {
+      targetLanguageCode: activeTarget,
+      activeProviderId: activeProv,
+    });
+    if (activeSource === "auto") {
+      updated.useAutoDetect = true;
+    } else {
+      updated.useAutoDetect = false;
+      updated.nativeLanguageCode = activeSource;
+    }
+
+    await chrome.runtime.sendMessage({
+      type: "set-settings",
+      settings: updated,
+    });
+  } catch (err) {
+    console.error("LinguaKit: Error saving suggestion settings:", err);
+  }
+}
+
 async function handleAutoTranslation(element, parsed) {
   isTranslating = true;
-  let suggestion = null;
 
   try {
     const baseText = parsed.text;
@@ -540,19 +703,54 @@ async function handleAutoTranslation(element, parsed) {
     const translation = res.result.translation;
     const providerInfo = `${res.result.providerName || "AI"} (${res.result.providerType || "Bot"})`;
 
+    if (currentSuggestion) {
+      currentSuggestion.destroy();
+      currentSuggestion = null;
+    }
+    const settingsCopy = Object.assign({}, settings, { targetLanguageCode: targetCode });
     // Use buildInlineSuggestion with auto positioning
-    suggestion = buildInlineSuggestion(element, translation, providerInfo, "auto");
+    const initialSource = settings.useAutoDetect ? "auto" : settings.nativeLanguageCode || "auto";
+    currentSuggestion = buildInlineSuggestion(element, translation, providerInfo, "auto", settingsCopy, initialSource);
+    currentSuggestion.inputElement = element;
+    currentSuggestion.sourceText = cleanSourceValue;
+
+    // Setup helper to save changed settings globally
+    const onSuggestionChange = () => {
+      void saveSuggestionSettings(
+        currentSuggestion,
+        initialSource,
+        targetCode,
+        settingsCopy.activeProviderId || "google-translate",
+      );
+    };
+
+    // Handle change events
+    if (currentSuggestion.providerSelect) {
+      currentSuggestion.providerSelect.addEventListener("change", onSuggestionChange);
+    }
+    if (currentSuggestion.targetSelect) {
+      currentSuggestion.targetSelect.addEventListener("change", onSuggestionChange);
+    }
+    if (currentSuggestion.sourceSelect) {
+      currentSuggestion.sourceSelect.addEventListener("change", onSuggestionChange);
+    }
 
     // Setup Tab/Esc handlers
     const handleKeydown = (ev) => {
       if (ev.key === "Tab") {
         ev.preventDefault();
-        setFieldText(element, translation);
-        suggestion.destroy();
+        if (currentSuggestion) {
+          setFieldText(element, currentSuggestion.translatedText);
+          currentSuggestion.destroy();
+          currentSuggestion = null;
+        }
         document.removeEventListener("keydown", handleKeydown, true);
       } else if (ev.key === "Escape") {
         ev.preventDefault();
-        suggestion.destroy();
+        if (currentSuggestion) {
+          currentSuggestion.destroy();
+          currentSuggestion = null;
+        }
         document.removeEventListener("keydown", handleKeydown, true);
       }
     };
@@ -561,13 +759,19 @@ async function handleAutoTranslation(element, parsed) {
 
     // Cleanup if element loses focus or is removed
     const onBlur = () => {
-      suggestion.destroy();
+      if (currentSuggestion) {
+        currentSuggestion.destroy();
+        currentSuggestion = null;
+      }
       document.removeEventListener("keydown", handleKeydown, true);
       element.removeEventListener("blur", onBlur);
     };
     element.addEventListener("blur", onBlur);
   } catch (err) {
-    if (suggestion) suggestion.destroy();
+    if (currentSuggestion) {
+      currentSuggestion.destroy();
+      currentSuggestion = null;
+    }
     showToast(err.message || "An error occurred");
     console.error(err);
   } finally {
@@ -646,10 +850,10 @@ function setFieldText(element, text, options = {}) {
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
       tag === "input" ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype,
       "value",
-    )?.set;
+    )?.set?.bind(element);
 
     if (nativeInputValueSetter) {
-      nativeInputValueSetter.call(element, text);
+      nativeInputValueSetter(text);
     } else {
       element.value = text;
     }
@@ -708,7 +912,14 @@ const preventBlur = (e) => {
   e.stopPropagation();
 };
 
-function buildInlineSuggestion(element, translatedText, providerInfo, position = "auto", settings = {}) {
+function buildInlineSuggestion(
+  element,
+  translatedText,
+  providerInfo,
+  position = "auto",
+  settings = {},
+  sourceLanguageCode = "auto",
+) {
   const container = document.createElement("div");
   container.className = "bt-inline-suggestion bt-vars-container";
 
@@ -816,23 +1027,31 @@ function buildInlineSuggestion(element, translatedText, providerInfo, position =
   try {
     iconUrl = isExtensionContextValid() ? chrome.runtime.getURL("assets/icons/icon-19.png") : "";
   } catch (error) {
-    console.log("LinguaKit: Error getting icon URL:", error.message);
+    console.error("LinguaKit: Error getting icon URL:", error.message);
     iconUrl = "";
   }
 
   container.innerHTML = `
     <div class="bt-suggestion-content">
       ${iconUrl ? `<img src="${iconUrl}" class="bt-suggestion-icon" alt="LinguaKit" />` : '<span class="bt-suggestion-icon">🔄</span>'}
-      <span class="bt-suggestion-text">${translatedText}</span>
+      <div class="bt-suggestion-text">${translatedText}</div>
       <kbd class="bt-suggestion-tab-hint">Tab</kbd>
     </div>
     <div class="bt-suggestion-footer">
+      <div class="bt-suggestion-source-container"></div>
+      <div class="bt-suggestion-target-container"></div>
       <div class="bt-suggestion-provider-container"></div>
     </div>
   `;
 
   container.addEventListener("mousedown", preventBlur);
   container.addEventListener("pointerdown", preventBlur);
+
+  const sourceContainer = container.querySelector(".bt-suggestion-source-container");
+  const sourceSelect = populateSourceSelectorForSuggestion(sourceContainer, settings, sourceLanguageCode);
+
+  const targetContainer = container.querySelector(".bt-suggestion-target-container");
+  const targetSelect = populateTargetSelectorForSuggestion(targetContainer, settings);
 
   const providerContainer = container.querySelector(".bt-suggestion-provider-container");
   const providerSelect = populateProviderSelectorForSuggestion(providerContainer, settings);
@@ -843,6 +1062,8 @@ function buildInlineSuggestion(element, translatedText, providerInfo, position =
     element: container,
     translatedText,
     providerSelect,
+    targetSelect,
+    sourceSelect,
     destroy: () => {
       container.remove();
     },
@@ -886,6 +1107,96 @@ function populateProviderSelectorForSuggestion(container, settings) {
   }
 }
 
+function populateTargetSelectorForSuggestion(container, settings) {
+  const activeTarget = settings.targetLanguageCode || "en";
+
+  const label = document.createElement("span");
+  label.className = "bt-suggestion-target-label";
+  label.textContent = "To: ";
+
+  const select = document.createElement("select");
+  select.className = "bt-suggestion-target-select";
+  select.tabIndex = -1; // CRITICAL: Prevent Tab key from focusing this element
+
+  const languages = [
+    "en",
+    "vi",
+    "ja",
+    "zh",
+    "ko",
+    "es",
+    "fr",
+    "de",
+    "ru",
+    "pt",
+    "it",
+    "hi",
+    "ar",
+    "tr",
+    "nl",
+    "pl",
+    "th",
+  ];
+  languages.forEach((code) => {
+    const option = document.createElement("option");
+    option.value = code;
+    option.textContent = i18n.t("lang." + code) || code;
+    if (code === activeTarget) option.selected = true;
+    select.appendChild(option);
+  });
+
+  container.appendChild(label);
+  container.appendChild(select);
+
+  return select;
+}
+
+function populateSourceSelectorForSuggestion(container, settings, sourceLangCode) {
+  const activeSource = sourceLangCode || settings.nativeLanguageCode || "auto";
+
+  const label = document.createElement("span");
+  label.className = "bt-suggestion-source-label";
+  label.textContent = "From: ";
+
+  const select = document.createElement("select");
+  select.className = "bt-suggestion-source-select";
+  select.tabIndex = -1; // CRITICAL: Prevent Tab key from focusing this element
+
+  const languages = [
+    "auto",
+    "en",
+    "vi",
+    "ja",
+    "zh",
+    "ko",
+    "es",
+    "fr",
+    "de",
+    "ru",
+    "pt",
+    "it",
+    "hi",
+    "ar",
+    "tr",
+    "nl",
+    "pl",
+    "th",
+  ];
+  languages.forEach((code) => {
+    const option = document.createElement("option");
+    option.value = code;
+    option.textContent =
+      code === "auto" ? i18n.t("popup.detectLanguage") || "Auto-detect" : i18n.t("lang." + code) || code;
+    if (code === activeSource) option.selected = true;
+    select.appendChild(option);
+  });
+
+  container.appendChild(label);
+  container.appendChild(select);
+
+  return select;
+}
+
 function setupSuggestionKeyHandlers(element, suggestion) {
   // CRITICAL: Remove any existing handler first
   if (currentKeyHandler) {
@@ -918,7 +1229,7 @@ function setupSuggestionKeyHandlers(element, suggestion) {
       if (isApplying) return false;
 
       // Apply translation (async, but we don't await in event handler)
-      applyTranslation();
+      void applyTranslation();
       return false;
     }
 
@@ -933,10 +1244,12 @@ function setupSuggestionKeyHandlers(element, suggestion) {
     }
 
     if (ev.key === "Backspace" || ev.key === "Delete") {
-      if (ev.type === "keyup") return;
+      if (ev.type === "keyup") return false;
       dismiss();
-      return;
+      return false;
     }
+
+    return true;
   };
 
   const applyTranslation = async () => {
@@ -1069,14 +1382,37 @@ async function handleInstantTranslate(element) {
         // Use 'auto' by default for smart positioning
         const position = domainConfig.position || "auto";
         const providerInfo = `${res.result.providerName || "AI"} (${res.result.providerType || "Bot"})`;
-        currentSuggestion = buildInlineSuggestion(element, res.result.translation, providerInfo, position, settings);
+        const initialSource = settings.nativeLanguageCode || "en";
+        currentSuggestion = buildInlineSuggestion(
+          element,
+          res.result.translation,
+          providerInfo,
+          position,
+          settings,
+          initialSource,
+        );
+        currentSuggestion.inputElement = element;
+        currentSuggestion.sourceText = freshText;
         setupSuggestionKeyHandlers(element, currentSuggestion);
 
-        // Handle provider change
+        const onSuggestionChange = () => {
+          void saveSuggestionSettings(
+            currentSuggestion,
+            initialSource,
+            settings.targetLanguageCode || "en",
+            settings.activeProviderId || "google-translate",
+          );
+        };
+
+        // Handle change events
         if (currentSuggestion.providerSelect) {
-          currentSuggestion.providerSelect.addEventListener("change", (e) => {
-            reTranslateSuggestion(element, text, e.target.value, settings);
-          });
+          currentSuggestion.providerSelect.addEventListener("change", onSuggestionChange);
+        }
+        if (currentSuggestion.targetSelect) {
+          currentSuggestion.targetSelect.addEventListener("change", onSuggestionChange);
+        }
+        if (currentSuggestion.sourceSelect) {
+          currentSuggestion.sourceSelect.addEventListener("change", onSuggestionChange);
         }
       } else {
         // Show error toast when translation fails
@@ -1089,21 +1425,36 @@ async function handleInstantTranslate(element) {
   }, settings.instantDelay || 3000);
 }
 
-async function reTranslateSuggestion(element, text, providerId, settings) {
-  if (!currentSuggestion) return;
+async function reTranslateSuggestion(
+  element,
+  text,
+  providerId,
+  settings,
+  targetLanguage,
+  sourceLanguage,
+  suggestionObj,
+) {
+  const activeSuggestion = suggestionObj || currentSuggestion;
+  if (!activeSuggestion) return;
 
-  const textEl = currentSuggestion.element.querySelector(".bt-suggestion-text");
+  const textEl = activeSuggestion.element.querySelector(".bt-suggestion-text");
   if (textEl) {
-    textEl.textContent = i18n.t("dialog.translating");
+    textEl.textContent = i18n.t("dialog.translating") || "Translating...";
     textEl.classList.add("bt-loading-text");
   }
+
+  // Update target language in settings if provided
+  const targetCode = targetLanguage || settings.targetLanguageCode || "en";
+  const sourceCode = sourceLanguage || "auto";
+  const useAuto = sourceCode === "auto";
 
   try {
     const res = await requestTranslation({
       text: text,
       nativeLanguageCode: settings.nativeLanguageCode || "en",
-      targetLanguage: settings.targetLanguageCode || "es",
-      useAutoDetect: settings.useAutoDetect === true,
+      targetLanguage: targetCode,
+      sourceLanguage: useAuto ? settings.nativeLanguageCode || "en" : sourceCode,
+      useAutoDetect: useAuto,
       providerId: providerId,
     });
 
@@ -1112,7 +1463,7 @@ async function reTranslateSuggestion(element, text, providerId, settings) {
         textEl.textContent = res.result.translation;
         textEl.classList.remove("bt-loading-text");
       }
-      currentSuggestion.translatedText = res.result.translation;
+      activeSuggestion.translatedText = res.result.translation;
     }
   } catch (err) {
     console.error("Re-translation error:", err);
@@ -1138,7 +1489,7 @@ function registerInstantMode() {
       const text = element.value?.trim() || element.innerText?.trim();
       if (TRANSLATION_COMMAND_PATTERN.test(text)) return;
 
-      handleInstantTranslate(element);
+      void handleInstantTranslate(element);
     },
     true,
   );
@@ -1256,7 +1607,7 @@ async function toggleInstantDomainForCurrentUrl() {
           }),
         );
       } catch (error) {
-        console.log("LinguaKit: Error saving settings:", error.message);
+        console.error("LinguaKit: Error saving settings:", error.message);
         return;
       }
 
@@ -1279,7 +1630,7 @@ async function toggleInstantDomainForCurrentUrl() {
         }),
       );
     } catch (error) {
-      console.log("LinguaKit: Error updating settings:", error.message);
+      console.error("LinguaKit: Error updating settings:", error.message);
       return;
     }
 
@@ -1395,7 +1746,6 @@ function snapshotPageTexts() {
 
   const nodes = getTextNodes(document.body);
   originalTexts = nodes.map((n) => n.textContent.trim());
-  console.log(`LinguaKit: Captured ${originalTexts.length} original text segments.`);
 }
 
 async function captureAndSavePageCache(domain, targetLang, silent = false) {
@@ -1433,7 +1783,6 @@ async function captureAndSavePageCache(domain, targetLang, silent = false) {
       if (!silent) {
         showToast(i18n.t("toast.cacheSaved") || "Translations cached");
       }
-      console.log(`LinguaKit: Successfully saved ${count} translations to cache.`);
     } catch (err) {
       console.error("LinguaKit: Error saving page cache:", err);
     }
@@ -1461,7 +1810,7 @@ function monitorGoogleTranslate(domain, targetLang) {
   setTimeout(() => {
     observer.disconnect();
     if (originalTexts.length > 0) {
-      captureAndSavePageCache(domain, targetLang, true);
+      void captureAndSavePageCache(domain, targetLang, true);
     }
   }, 15000);
 }
@@ -1503,7 +1852,7 @@ async function registerAutoPageTranslate() {
           if (applied) return; // Exit if cache applied successfully
         }
       } catch (e) {
-        console.log("LinguaKit: Cache check failed, falling back to Google Translate", e.message);
+        console.warn("LinguaKit: Cache check failed, falling back to Google Translate", e.message);
       }
 
       // No cache or apply failed, use Google Translate and learn
@@ -1717,7 +2066,7 @@ function registerInstantLabelIndicator() {
   try {
     iconUrl = isExtensionContextValid() ? chrome.runtime.getURL("assets/icons/icon-19.png") : "";
   } catch (error) {
-    console.log("LinguaKit: Error getting icon URL for label:", error.message);
+    console.error("LinguaKit: Error getting icon URL for label:", error.message);
     iconUrl = "";
   }
   const labelText = document.createElement("span");
@@ -1765,7 +2114,7 @@ function registerInstantLabelIndicator() {
   let labelTimeout = null;
 
   // Load initial settings
-  getSettings().then((s) => {
+  void getSettings().then((s) => {
     currentSettings = s;
   });
 
@@ -1871,7 +2220,7 @@ function showTranslateIcon(x, y, selection) {
     try {
       iconUrl = isExtensionContextValid() ? chrome.runtime.getURL("assets/icons/icon-32.png") : "";
     } catch (error) {
-      console.log("LinguaKit: Error getting icon URL for translate icon:", error.message);
+      console.error("LinguaKit: Error getting icon URL for translate icon:", error.message);
       iconUrl = "";
     }
 
@@ -1903,13 +2252,13 @@ function showTranslateIcon(x, y, selection) {
     icon.addEventListener("click", (e) => {
       e.stopPropagation();
       // Pass selection rect instead of icon rect for better positioning
-      showTranslationPopup(rect, selectedText, icon.dataset.position);
+      void showTranslationPopup(rect, selectedText, icon.dataset.position);
     });
 
     document.body.appendChild(icon);
     selectionIcon = icon;
   } catch (error) {
-    console.log("LinguaKit: Error creating translate icon:", error.message);
+    console.error("LinguaKit: Error creating translate icon:", error.message);
     // Extension context might be invalidated, clean up
     if (error.message.includes("Extension context invalidated")) {
       cleanupExtensionElements();
@@ -2177,12 +2526,11 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
     try {
       iconUrl = isExtensionContextValid() ? chrome.runtime.getURL("assets/icons/icon-19.png") : "";
     } catch (error) {
-      console.log("LinguaKit: Error getting icon URL for popup:", error.message);
+      console.error("LinguaKit: Error getting icon URL for popup:", error.message);
       iconUrl = "";
     }
     popup.className = "bt-selection-popup bt-vars-container";
     popup.innerHTML = `
-    <div class="bt-selection-bg-pattern"></div>
     <div class="bt-selection-header">
       <span class="bt-selection-title">
         ${iconUrl ? `<img src="${iconUrl}" width="19" height="19" alt="Translate" style="float:left;margin-right:4px" />` : '<span style="float:left;margin-right:4px;font-size:19px;">🔄</span>'} 
@@ -2345,6 +2693,8 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
       popup.classList.remove("bt-popup-bottom");
     }
     selectionPopup = popup;
+    popup.originalText = text;
+    popup.activeTask = "translate";
 
     // Store selectionRect for later use in readjustment
     popup.selectionRect = selectionRect;
@@ -2397,7 +2747,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
     populateLanguageSelector(popup.querySelector(".bt-selection-target-select"), defaultTarget, false);
 
     // Initial translation
-    translateSelectionWithSource(text, defaultSource, popup, null, defaultTarget);
+    void translateSelectionWithSource(text, defaultSource, popup, null, defaultTarget);
 
     popup.querySelector(".bt-selection-close").addEventListener("click", () => {
       hideTranslationPopup();
@@ -2411,17 +2761,17 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
 
       // Save preference
       try {
-        safeRuntimeCall(() =>
+        void safeRuntimeCall(() =>
           chrome.runtime.sendMessage({
             type: "set-settings",
-            settings: { ...settings, selectionLastSource: e.target.value },
+            settings: Object.assign({}, settings, { selectionLastSource: e.target.value }),
           }),
         );
       } catch (error) {
-        console.log("LinguaKit: Error saving source preference:", error.message);
+        console.error("LinguaKit: Error saving source preference:", error.message);
       }
 
-      translateSelectionWithSource(text, e.target.value, popup, providerId, currentTargetLang);
+      void translateSelectionWithSource(text, e.target.value, popup, providerId, currentTargetLang);
     });
 
     popup.querySelector(".bt-selection-target-select").addEventListener("change", (e) => {
@@ -2430,19 +2780,18 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
       const sourceLang = popup.querySelector(".bt-selection-source-select").value;
 
       // Save preference
-      console.log("Saving selectionLastTarget:", e.target.value);
       try {
-        safeRuntimeCall(() =>
+        void safeRuntimeCall(() =>
           chrome.runtime.sendMessage({
             type: "set-settings",
-            settings: { ...settings, selectionLastTarget: e.target.value },
+            settings: Object.assign({}, settings, { selectionLastTarget: e.target.value }),
           }),
         );
       } catch (error) {
-        console.log("LinguaKit: Error saving target preference:", error.message);
+        console.error("LinguaKit: Error saving target preference:", error.message);
       }
 
-      translateSelectionWithSource(text, sourceLang, popup, providerId, e.target.value);
+      void translateSelectionWithSource(text, sourceLang, popup, providerId, e.target.value);
     });
 
     // Populate provider selector
@@ -2451,7 +2800,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
       providerSelect.addEventListener("change", (e) => {
         const sourceLang = popup.querySelector(".bt-selection-source-select").value;
         const currentTargetLang = popup.querySelector(".bt-selection-target-select").value;
-        translateSelectionWithSource(text, sourceLang, popup, e.target.value, currentTargetLang);
+        void translateSelectionWithSource(text, sourceLang, popup, e.target.value, currentTargetLang);
       });
     }
 
@@ -2475,7 +2824,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
           }
         }
 
-        translateSelectionWithSource(text, "auto", popup, effectiveProviderId, null, task);
+        void translateSelectionWithSource(text, "auto", popup, effectiveProviderId, null, task);
       });
     });
 
@@ -2545,7 +2894,7 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
       }
     });
   } catch (error) {
-    console.log("LinguaKit: Error showing translation popup:", error.message);
+    console.error("LinguaKit: Error showing translation popup:", error.message);
     // Extension context might be invalidated, clean up
     if (error.message.includes("Extension context invalidated")) {
       cleanupExtensionElements();
@@ -2568,6 +2917,9 @@ async function translateSelectionWithSource(
   targetLangOverride = null,
   task = "translate",
 ) {
+  if (popup) {
+    popup.activeTask = task;
+  }
   const settings = await getSettings();
   const nativeLang = settings.nativeLanguageCode || "vi";
   const targetLang = targetLangOverride || nativeLang;
@@ -2690,8 +3042,8 @@ function populateLanguageSelector(select, defaultValue = "auto", includeAuto = t
   if (!select) return;
 
   const languages = includeAuto
-    ? ["auto", "en", "vi", "zh", "ja", "ko", "es", "fr", "de"]
-    : ["en", "vi", "zh", "ja", "ko", "es", "fr", "de"];
+    ? ["auto", "en", "vi", "ja", "zh", "ko", "es", "fr", "de", "ru", "pt", "it", "hi", "ar", "tr", "nl", "pl", "th"]
+    : ["en", "vi", "ja", "zh", "ko", "es", "fr", "de", "ru", "pt", "it", "hi", "ar", "tr", "nl", "pl", "th"];
 
   languages.forEach((code) => {
     const option = document.createElement("option");
@@ -2916,7 +3268,7 @@ function registerHoverTranslate() {
               clearAllHoverTranslations();
             }
 
-            handleHoverTranslate(translatable, settings);
+            void handleHoverTranslate(translatable, settings);
           }
         }
       }
@@ -2962,7 +3314,7 @@ function registerHoverTranslate() {
 
       currentHoveredElement = element;
       hoverTimeout = setTimeout(() => {
-        handleHoverTranslate(element, settings);
+        void handleHoverTranslate(element, settings);
       }, 200);
     },
     true,
@@ -2978,8 +3330,8 @@ function registerHoverTranslate() {
 }
 
 /**
- * Check if element is a translation boundary (should not traverse beyond)
- * Boundaries are containers for individual messages/content blocks on chat platforms
+ * Check if element is a translation boundary (should not traverse beyond) Boundaries are containers for individual
+ * messages/content blocks on chat platforms
  */
 function isTranslationBoundary(element) {
   if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
@@ -3011,9 +3363,7 @@ function isTranslationBoundary(element) {
   return false;
 }
 
-/**
- * Find the nearest boundary ancestor (if any)
- */
+/** Find the nearest boundary ancestor (if any) */
 function findBoundaryAncestor(element) {
   let current = element;
   while (current && current !== document.body) {
@@ -3153,9 +3503,6 @@ async function handleHoverTranslate(element, settings) {
     return;
   }
 
-  // Log parent element info for debugging
-  console.log("[Hover] Target:", element.tagName, "Granularity:", settings.hoverTranslateGranularity || "line");
-
   // Get granularity setting (default: 'line')
   const granularity = settings.hoverTranslateGranularity || "line";
 
@@ -3166,7 +3513,7 @@ async function handleHoverTranslate(element, settings) {
 
   // Route to appropriate translation method based on granularity
   if (granularity === "line") {
-    return handleLineByLineTranslate(
+    await handleLineByLineTranslate(
       element,
       text,
       settings,
@@ -3176,8 +3523,9 @@ async function handleHoverTranslate(element, settings) {
       hoverTranslateCache,
       clearAllHoverTranslations,
     );
+    return;
   } else if (granularity === "sentence") {
-    return handleSentenceBySentenceTranslate(
+    await handleSentenceBySentenceTranslate(
       element,
       text,
       settings,
@@ -3187,6 +3535,7 @@ async function handleHoverTranslate(element, settings) {
       hoverTranslateCache,
       clearAllHoverTranslations,
     );
+    return;
   }
 
   // Default: Block mode (existing behavior)
@@ -3273,7 +3622,7 @@ function createHoverPlaceholder(element, settings) {
     try {
       iconSrc = isExtensionContextValid() ? chrome.runtime.getURL("assets/icons/icon-19.png") : "";
     } catch (error) {
-      console.log("LinguaKit: Error getting icon URL for hover:", error.message);
+      console.error("LinguaKit: Error getting icon URL for hover:", error.message);
       iconSrc = "";
     }
 
@@ -3405,4 +3754,232 @@ function applyHoverCustomStyles(style) {
   root.style.setProperty("--bt-hover-text-color", style.textColor || "#ffffff");
   root.style.setProperty("--bt-hover-font-size", style.fontSize || "0.95em");
   root.style.setProperty("--bt-hover-show-icon", style.showIcon !== false ? "inline" : "none");
+}
+
+/**
+ * Starts the OCR cropping flow by showing a full-screen canvas overlay with the captured screenshot.
+ *
+ * @function startOcrCrop
+ * @param {string} screenshotUrl - Base64 Data URL of the active tab screenshot.
+ */
+function startOcrCrop(screenshotUrl) {
+  // 1. Inject custom overlay styles if not already present
+  if (!document.getElementById("lk-ocr-styles")) {
+    const styleEl = document.createElement("style");
+    styleEl.id = "lk-ocr-styles";
+    styleEl.textContent = `
+      #lk-ocr-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 2147483647;
+        cursor: crosshair;
+        user-select: none;
+        -webkit-user-select: none;
+        background: transparent;
+      }
+      #lk-ocr-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .lk-ocr-indicator {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.85);
+        color: #ffffff;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        pointer-events: none;
+        z-index: 2147483647;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        border: 1px solid rgba(255,255,255,0.15);
+      }
+    `;
+    document.head.appendChild(styleEl);
+  }
+
+  // 2. Prevent duplicate overlays
+  if (document.getElementById("lk-ocr-overlay")) return;
+
+  // 3. Create the overlay DOM elements
+  const overlay = document.createElement("div");
+  overlay.id = "lk-ocr-overlay";
+
+  const canvas = document.createElement("canvas");
+  canvas.id = "lk-ocr-canvas";
+  overlay.appendChild(canvas);
+
+  const indicator = document.createElement("div");
+  indicator.className = "lk-ocr-indicator";
+  indicator.textContent =
+    i18n && i18n.t
+      ? i18n.t("dialog.ocrTip") || "Kéo chuột để chọn vùng chữ cần dịch (ESC để hủy)"
+      : "Kéo chuột để chọn vùng chữ cần dịch (ESC để hủy)";
+  overlay.appendChild(indicator);
+
+  document.documentElement.appendChild(overlay);
+
+  // 4. Set canvas logical and display sizes
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+
+  // 5. Load screenshot image
+  const img = new Image();
+  img.addEventListener("load", () => {
+    // Render initial screen with dark overlay
+    drawOverlay(0, 0, 0, 0);
+
+    // Mouse event handlers
+    let isDrawing = false;
+    let startX = 0;
+    let startY = 0;
+    let endX = 0;
+    let endY = 0;
+
+    function drawOverlay(x, y, w, h) {
+      // Clear canvas
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      // Draw base screenshot
+      ctx.drawImage(img, 0, 0, rect.width, rect.height);
+
+      // Draw dark semi-transparent tint
+      ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+
+      if (w > 0 && h > 0) {
+        // Clear the selection box to make it bright/clear
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.clip();
+        ctx.drawImage(img, 0, 0, rect.width, rect.height);
+        ctx.restore();
+
+        // Draw crisp crop box border
+        ctx.strokeStyle = "#4f46e5";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(x, y, w, h);
+      }
+    }
+
+    const onMouseDown = (e) => {
+      if (e.button !== 0) return; // Left click only
+      isDrawing = true;
+      startX = e.clientX;
+      startY = e.clientY;
+    };
+
+    const onMouseMove = (e) => {
+      if (!isDrawing) return;
+      endX = e.clientX;
+      endY = e.clientY;
+
+      const x = Math.min(startX, endX);
+      const y = Math.min(startY, endY);
+      const w = Math.abs(startX - endX);
+      const h = Math.abs(startY - endY);
+
+      drawOverlay(x, y, w, h);
+    };
+
+    const onMouseUp = async (e) => {
+      if (!isDrawing) return;
+      isDrawing = false;
+      endX = e.clientX;
+      endY = e.clientY;
+
+      const x = Math.min(startX, endX);
+      const y = Math.min(startY, endY);
+      const w = Math.abs(startX - endX);
+      const h = Math.abs(startY - endY);
+
+      cleanup();
+
+      // If selection is too small, cancel
+      if (w < 10 || h < 10) {
+        return;
+      }
+
+      // Perform crop
+      const cropCanvas = document.createElement("canvas");
+      cropCanvas.width = w * dpr;
+      cropCanvas.height = h * dpr;
+      const cropCtx = cropCanvas.getContext("2d");
+
+      // Draw cropped area onto temp canvas
+      cropCtx.drawImage(img, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, w * dpr, h * dpr);
+
+      const croppedBase64 = cropCanvas.toDataURL("image/jpeg", 0.95);
+
+      // Show translating toast
+      showToast(i18n && i18n.t ? i18n.t("toast.translating") : "Đang nhận diện và dịch...");
+
+      // Send to background for OCR processing
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "run-ocr",
+          payload: { croppedImageBase64: croppedBase64, lang: "eng+vie+jpn" },
+        });
+
+        if (response?.ok && response?.text && response.text.trim()) {
+          const recognizedText = response.text.trim();
+
+          // Construct a selection rectangle for the UI popup placement
+          const mockSelectionRect = {
+            left: x,
+            top: y,
+            width: w,
+            height: h,
+            bottom: y + h,
+            right: x + w,
+          };
+
+          // Trigger the beautiful selection popup with the OCR-ed text!
+          void showTranslationPopup(mockSelectionRect, recognizedText, "bottom");
+        } else {
+          showToast(
+            response?.error ||
+              (i18n && i18n.t
+                ? i18n.t("toast.ocrNoText") || "Không tìm thấy chữ trong vùng chọn."
+                : "Không tìm thấy chữ trong vùng chọn."),
+          );
+        }
+      } catch (err) {
+        console.error("OCR Request failed:", err);
+        showToast(i18n && i18n.t ? i18n.t("toast.translationFailed") : "Dịch OCR thất bại.");
+      }
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        cleanup();
+      }
+    };
+
+    function cleanup() {
+      overlay.remove();
+      document.removeEventListener("keydown", onKeyDown, true);
+    }
+
+    // Bind event listeners
+    overlay.addEventListener("mousedown", onMouseDown);
+    overlay.addEventListener("mousemove", onMouseMove);
+    overlay.addEventListener("mouseup", onMouseUp);
+    document.addEventListener("keydown", onKeyDown, true);
+  });
+  img.src = screenshotUrl;
 }

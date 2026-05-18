@@ -1,12 +1,18 @@
 /**
- * Format Utilities for HTML/Markdown Conversion
- * Preserves formatting during translation by converting HTML to Markdown and back
+ * LinguaKit Formatting Utilities. Handles bidirectional format translation (HTML <-> Markdown). By mapping rich textual
+ * layouts (e.g. bold, italics, strikethrough, anchor links, block code, ordered/unordered lists) to lightweight
+ * Markdown structure, the translation engine can process semantic content cleanly, preventing AI translation models
+ * from truncating or stripping structural nodes.
+ *
+ * @file Format-utils.js
  */
 
 /**
- * Check if text contains HTML tags that need format conversion
- * @param {string} text - Text to check
- * @returns {boolean} - True if text contains HTML tags
+ * Check if a text block contains HTML tags that warrant formatting preservation.
+ *
+ * @function shouldConvertFormat
+ * @param {string} text - The input raw text snippet to inspect.
+ * @returns {boolean} True if the snippet contains markup elements, false otherwise.
  */
 export function shouldConvertFormat(text) {
   if (!text || typeof text !== "string") return false;
@@ -14,10 +20,12 @@ export function shouldConvertFormat(text) {
 }
 
 /**
- * Convert HTML to Markdown before translation
- * Preserves formatting like bold, italic, code, lists, etc.
- * @param {string} htmlContent - HTML content to convert
- * @returns {string} - Markdown representation
+ * Convert HTML structures to corresponding Markdown representation before translation. Preserves syntax formatting like
+ * bold, italic, inline code, anchor URLs, and lists.
+ *
+ * @function htmlToMarkdown
+ * @param {string} htmlContent - The raw HTML markup text to parse.
+ * @returns {string} The simplified Markdown equivalent string.
  */
 export function htmlToMarkdown(htmlContent) {
   if (!htmlContent) return "";
@@ -56,9 +64,11 @@ export function htmlToMarkdown(htmlContent) {
 }
 
 /**
- * Convert Markdown back to HTML after translation
- * @param {string} markdownContent - Markdown content to convert
- * @returns {string} - HTML representation
+ * Re-converts Markdown structures back to standard HTML tags post-translation.
+ *
+ * @function markdownToHtml
+ * @param {string} markdownContent - The translated Markdown string.
+ * @returns {string} The fully restored HTML markup string.
  */
 export function markdownToHtml(markdownContent) {
   if (!markdownContent) return "";

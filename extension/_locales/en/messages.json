@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "LinguaKit",
+    "description": "The extension name"
+  },
+  "extDescription": {
+    "message": "Brings instant, AI-powered translation directly to your input fields.",
+    "description": "The extension description"
+  },
+  "ocrCommandDesc": {
+    "message": "Trigger OCR capture and translation",
+    "description": "Hotkey command description for OCR translation"
+  }
+}

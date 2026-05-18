@@ -33,6 +33,7 @@
 
 .bt-selection-popup {
   all: initial;
+  will-change: transform, opacity;
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -41,11 +42,16 @@
   width: max-content;
   min-height: 150px;
   max-height: min(70vh, calc(100vh - 40px));
+  background: #ffffff; /* Fallback for when CSS variables are blocked/missing */
   background: var(--bt-glass-background);
   backdrop-filter: var(--bt-glass-blur);
   -webkit-backdrop-filter: var(--bt-glass-blur);
+  border: 1px solid #e2e8f0; /* Fallback border */
   border: 1px solid var(--bt-glass-border);
   border-radius: var(--bt-radius-small);
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1); /* Fallback shadow */
   box-shadow: var(--bt-glass-shadow);
   font-family:
     system-ui,

@@ -1,26 +1,32 @@
 /**
- * LinguaKit - Page Translate Main World Script
- * This script runs in the page context (MAIN world) to bypass extension CSP rules
- * and handle the Google Translate widget initialization.
+ * LinguaKit - Page Translate Main World Script. Runs directly in the web page's MAIN window context to bypass Extension
+ * CSP (Content Security Policy) constraints and initialize the Google Translate simple widget dynamically.
+ *
+ * @file Page-translate.js
  */
 
 (function () {
-  // Prevent multiple injections
+  // Prevent multiple script execution/initialization on the same page
   if (window.lkMainWorldInitialized) {
-    console.log("LinguaKit: Main world script already initialized.");
     return;
   }
   window.lkMainWorldInitialized = true;
 
-  console.log("LinguaKit: Main world script initializing...");
-
-  // Store the target language globally in the main world
+  /**
+   * The target language code configured for the Google Translate widget. Defaults to 'en' (English).
+   *
+   * @type {string} lkTargetLang
+   */
   let lkTargetLang = "en";
 
-  // Google Translate callback
+  /**
+   * Google Translate API callback function. Initializes the simple inline translation element container dynamically on
+   * the webpage.
+   *
+   * @function googleTranslateElementInit
+   * @returns {void}
+   */
   window.googleTranslateElementInit = function () {
-    console.log("LinguaKit: Google Translate Element Init called.");
-
     if (typeof google === "undefined" || !google.translate) {
       console.error("LinguaKit: Google Translate API not loaded properly.");
       return;
@@ -37,13 +43,15 @@
         },
         "google_translate_element",
       );
-      console.log("LinguaKit: Google Translate Element created.");
     } catch (e) {
       console.error("LinguaKit: Error creating TranslateElement:", e);
     }
   };
 
-  // Listen for the trigger event from the content script
+  /**
+   * Listen for custom custom-events dispatched from the extension content script to trigger a dynamic page translation
+   * request.
+   */
   window.addEventListener("lk-trigger-page-translate", (event) => {
     const { targetLang } = event.detail || {};
     if (!targetLang) return;
@@ -51,7 +59,7 @@
     console.log(`LinguaKit: Triggering page translate to: ${targetLang}`);
     lkTargetLang = targetLang;
 
-    // Check if script is already there
+    // Check if the external Google Translate API script has already been loaded
     const apiScript = document.getElementById("lk-google-translate-api");
 
     if (!apiScript) {
@@ -60,7 +68,7 @@
       script.type = "text/javascript";
       script.src = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
 
-      // Detect if script was blocked by a content blocker
+      // Detect if script was blocked by browser's content block rules (e.g. AdBlockers)
       script.addEventListener("error", () => {
         console.error("LinguaKit: Google Translate script failed to load (blocked?).");
         window.dispatchEvent(
@@ -71,14 +79,11 @@
       });
 
       document.head.appendChild(script);
-      console.log("LinguaKit: Google Translate API script added.");
     } else {
-      // If script exists, but we want to re-trigger or change language
+      // Re-trigger/re-render widget if the script is already loaded
       if (typeof google !== "undefined" && google.translate && google.translate.TranslateElement) {
-        console.log("LinguaKit: API already loaded, attempting to re-init translation.");
-
         if (window.googleTranslateElementInit) {
-          // Clear existing widget content to be safe
+          // Clear existing widget content to prevent duplicate UI renders
           const container = document.getElementById("google_translate_element");
           if (container) container.innerHTML = "";
           window.googleTranslateElementInit();
@@ -86,6 +91,4 @@
       }
     }
   });
-
-  console.log("LinguaKit: Main world script ready.");
 })();

@@ -2,11 +2,15 @@
 node_modules/
 build/
 dist/
+benchmarks/
 .cursor/
+.vite-hooks/
+extension/src/common/tesseract/
 
 # System files
 .DS_Store
 Thumbs.db
+linguakit-extension.zip
 
 # Logs
 *.log*
@@ -17,5 +21,5 @@ Thumbs.db
 *.tmp
 
 # Environment files
-package-lock.json
 bun.lock
+AGENTS.md
