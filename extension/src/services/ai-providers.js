@@ -56,6 +56,32 @@ Maintain the same language.
 Return ONLY the rewritten text.`;
 
 /**
+ * System prompt to explain vocabulary, grammar, and idioms in the text.
+ *
+ * @constant {string} EXPLAIN_PROMPT
+ */
+const EXPLAIN_PROMPT = `You are a helpful language teacher. Analyze the user's text and explain difficult words, grammar structures, or idioms. 
+Explain in the target language: {targetLang}. Keep the explanation structured, clear, and easy to read.`;
+
+/**
+ * System prompt to correct grammar/spelling and explain what was changed.
+ *
+ * @constant {string} CORRECT_PROMPT
+ */
+const CORRECT_PROMPT = `You are an expert editor. Analyze the user's text. Correct any spelling or grammar errors.
+First, output the corrected version of the text.
+Then, if there were any errors, provide a bulleted list explaining what was corrected and why in the target language: {targetLang}.`;
+
+/**
+ * System prompt to simplify complex text (ELI5).
+ *
+ * @constant {string} SIMPLIFY_PROMPT
+ */
+const SIMPLIFY_PROMPT = `You are a clear communicator. Rewrite the user's text to be extremely simple, clear, and easy to understand (as if explaining to a child). 
+Maintain the same language as the source text. 
+Return ONLY the simplified text.`;
+
+/**
  * Abstract base class representing a generic translation engine.
  *
  * @class TranslationProvider
@@ -97,6 +123,15 @@ class TranslationProvider {
         break;
       case "tone-casual":
         basePrompt = TONE_CASUAL_PROMPT;
+        break;
+      case "explain":
+        basePrompt = EXPLAIN_PROMPT.replace("{targetLang}", targetLang);
+        break;
+      case "correct":
+        basePrompt = CORRECT_PROMPT.replace("{targetLang}", targetLang);
+        break;
+      case "simplify":
+        basePrompt = SIMPLIFY_PROMPT;
         break;
       default:
         basePrompt = DEFAULT_SYSTEM_PROMPT.replace("{sourceLang}", sourceLang).replace("{targetLang}", targetLang);
@@ -160,15 +195,23 @@ class OpenAIProvider extends TranslationProvider {
     // Construct URL: baseUrl + model
     const url = baseUrl.endsWith("/") ? `${baseUrl}${model}` : `${baseUrl}/${model}`;
 
-    const response = await fetch(url, {
+    // Route request through the local high-performance proxy server to bypass CORS restrictions
+    const proxyUrl = "http://localhost:3001/api/translate";
+
+    const response = await fetch(proxyUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Basic ${auth}`,
       },
       body: JSON.stringify({
-        system_prompt: systemPrompt,
-        user_input: text,
+        url,
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+        body: {
+          system_prompt: systemPrompt,
+          user_input: text,
+        },
       }),
     });
 
@@ -212,21 +255,43 @@ class GoogleTranslateProvider extends TranslationProvider {
     const sl = sourceLang === "auto" ? "auto" : sourceLang.toLowerCase();
     const tl = targetLang.toLowerCase();
 
-    const encodedText = encodeURIComponent(text);
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&dj=1&sl=${sl}&tl=${tl}&q=${encodedText}`;
+    let data;
+    if (this.config?.useGoogleTranslateProxy) {
+      const proxyUrl = "http://localhost:3001/api/translate-google";
+      const response = await fetch(proxyUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text,
+          sourceLang: sl,
+          targetLang: tl,
+        }),
+      });
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+      if (!response.ok) {
+        throw new Error("Google Translate Proxy Error: " + response.statusText);
+      }
 
-    if (!response.ok) {
-      throw new Error("Google Translate API Error: " + response.statusText);
+      data = await response.json();
+    } else {
+      const encodedText = encodeURIComponent(text);
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&dj=1&sl=${sl}&tl=${tl}&q=${encodedText}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Google Translate API Error: " + response.statusText);
+      }
+
+      data = await response.json();
     }
-
-    const data = await response.json();
 
     // Parse standard multi-segment translation sentences payload
     if (!data.sentences || !Array.isArray(data.sentences)) {
@@ -288,7 +353,13 @@ export class AIProviderService {
       case "openai":
         return new OpenAIProvider(config, this.customPrompt);
       case "google-translate":
-        return new GoogleTranslateProvider(config, this.customPrompt);
+        return new GoogleTranslateProvider(
+          {
+            ...config,
+            useGoogleTranslateProxy: this.settings.useGoogleTranslateProxy || false,
+          },
+          this.customPrompt,
+        );
       default:
         throw new Error(`Unsupported provider type: ${type}`);
     }

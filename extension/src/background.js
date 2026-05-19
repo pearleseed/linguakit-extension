@@ -62,6 +62,7 @@ async function readSettings() {
       targetLanguageCode: "en",
       useAutoDetect: false, // Default to fixed direction (Target→Native)
       showConfirmModal: true,
+      rightClickUnlockerEnabled: false,
       ocrEnabled: true,
       dialogTimeout: 10,
       aliases: {
@@ -95,9 +96,9 @@ async function readSettings() {
       // Keyboard shortcut for toggle instant domain
       instantToggleShortcut: {
         key: "I",
-        ctrl: true,
+        ctrl: false,
         shift: true,
-        alt: false,
+        alt: true,
       },
       // Hover to Translate settings
       hoverTranslateEnabled: false,
@@ -105,19 +106,19 @@ async function readSettings() {
       hoverTranslateDomains: [],
       hoverModifierKey: "ctrl", // "ctrl", "shift", "alt"
       hoverToggleShortcut: {
-        key: "O",
-        ctrl: true,
+        key: "H",
+        ctrl: false,
         shift: true,
-        alt: false,
+        alt: true,
       },
       // Auto Page Translate settings
       autoPageTranslateEnabled: false,
       autoPageTranslateDomains: [],
       autoTranslateToggleShortcut: {
         key: "P",
-        ctrl: true,
+        ctrl: false,
         shift: true,
-        alt: false,
+        alt: true,
       },
       // Style customization for hover inject mode
       hoverInjectStyle: {
@@ -168,6 +169,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // 3. Settings management: Write operation
   if (message?.type === "set-settings") {
     void writeSettings(message.settings).then((s) => sendResponse({ ok: true, settings: s }));
+    return true;
+  }
+
+  // 3.5. Connectivity testing helpers
+  if (message?.type === "test-google-proxy") {
+    const aiService = new AIProviderService({
+      useGoogleTranslateProxy: message.useProxy,
+      activeProviderId: "google-translate",
+      providers: [{ id: "google-translate", type: "google-translate", config: {} }],
+    });
+
+    aiService
+      .translate("Hello", "auto", "vi", "google-translate", "translate")
+      .then((result) => sendResponse({ ok: true, translation: result.translation }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
+  if (message?.type === "test-provider") {
+    const aiService = new AIProviderService({
+      activeProviderId: "temp-test",
+      providers: [
+        {
+          id: "temp-test",
+          type: message.providerType,
+          config: message.config,
+        },
+      ],
+    });
+
+    aiService
+      .translate("Hello", "en", "Vietnamese", "temp-test", "translate")
+      .then((result) => sendResponse({ ok: true, translation: result.translation }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }
 

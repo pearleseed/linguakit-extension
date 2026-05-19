@@ -58,19 +58,66 @@
   --bt-color-danger-text: #991b1b;
 
   /* Solid Theme (Synced with main interface) */
-  --bt-glass-background: #ffffff;
-  --bt-glass-border: var(--bt-color-border-default);
-  --bt-glass-blur: none;
-  --bt-glass-shadow: var(--bt-shadow-lg);
+  --bt-glass-background: rgba(255, 255, 255, 0.85);
+  --bt-glass-border: rgba(15, 23, 42, 0.08);
+  --bt-glass-blur: 16px;
+  --bt-glass-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.05), 0 4px 12px -2px rgba(0, 0, 0, 0.03);
 
   --bt-ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --bt-transition-duration: 200ms;
+  --bt-transition-duration: 250ms;
 
   --bt-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --bt-shadow-default: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --bt-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --bt-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --bt-shadow-interactive: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+/* Dark Mode Theme Customizations */
+body.dark,
+body.dark .bt-vars-container {
+  --bt-color-background-default: #0f172a; /* Slate 900 */
+  --bt-color-background-subtle: #1e293b; /* Slate 800 */
+  --bt-color-background-hover: #334155; /* Slate 700 */
+  --bt-color-background-interactive: #475569; /* Slate 600 */
+
+  --bt-color-border-default: #334155;
+  --bt-color-border-hover: #475569;
+  --bt-color-border-interactive: #64748b;
+
+  --bt-color-text-default: #f8fafc; /* Slate 50 */
+  --bt-color-text-muted: #94a3b8; /* Slate 400 */
+
+  --bt-color-primary-background: #38bdf8; /* Sky 400 */
+  --bt-color-primary-background-hover: #0ea5e9;
+  --bt-color-primary-background-interactive: #0c4a6e;
+  --bt-color-primary-border: #38bdf8;
+  --bt-color-primary-border-hover: #0ea5e9;
+  --bt-color-primary-text: #0f172a;
+
+  --bt-color-mirror-background: #2e1065;
+  --bt-color-mirror-background-hover: #3b0764;
+  --bt-color-mirror-border: #4c1d95;
+
+  --bt-color-mirror-solid: #c084fc;
+  --bt-color-mirror-solid-hover: #a855f7;
+  --bt-color-mirror-solid-active: #9333ea;
+
+  --bt-color-mirror-text: #e9d5ff;
+  --bt-color-mirror-text-inverse: #0f172a;
+
+  --bt-color-danger-background: #450a0a;
+  --bt-color-danger-background-hover: #7f1d1d;
+  --bt-color-danger-background-interactive: #991b1b;
+  --bt-color-danger-border: #991b1b;
+  --bt-color-danger-border-hover: #b91c1c;
+  --bt-color-danger-text: #fecaca;
+
+  /* Glassmorphism for Dark Mode */
+  --bt-glass-background: rgba(15, 23, 42, 0.8);
+  --bt-glass-border: rgba(255, 255, 255, 0.08);
+  --bt-glass-blur: 20px;
+  --bt-glass-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 @keyframes bt-spin {

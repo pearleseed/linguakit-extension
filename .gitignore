@@ -2,7 +2,6 @@
 node_modules/
 build/
 dist/
-benchmarks/
 .cursor/
 .vite-hooks/
 extension/src/common/tesseract/
@@ -11,6 +10,7 @@ extension/src/common/tesseract/
 .DS_Store
 Thumbs.db
 linguakit-extension.zip
+server/linguakit-server*
 
 # Logs
 *.log*

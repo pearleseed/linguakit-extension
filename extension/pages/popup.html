@@ -17,6 +17,7 @@
             <span data-i18n="popup.title">LinguaKit</span>
           </h1>
           <div class="bt-controls">
+            <!-- Language toggle -->
             <div id="lang-toggle" class="bt-lang-toggle">
               <span data-lang="en" class="active">EN</span>
               <span class="divider">|</span>
@@ -24,6 +25,47 @@
               <span class="divider">|</span>
               <span data-lang="vi">VI</span>
             </div>
+            <!-- Theme Toggle Button -->
+            <button id="theme-toggle" class="bt-theme-toggle" title="Toggle theme">
+              <!-- Sun Icon -->
+              <svg
+                class="sun-icon"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+              <!-- Moon Icon -->
+              <svg
+                class="moon-icon"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="display: none"
+              >
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            </button>
+            <!-- Enable Switch -->
             <label class="bt-switch">
               <input type="checkbox" id="enabled" />
               <span class="slider round"></span>
@@ -36,207 +78,19 @@
         </p>
       </div>
 
-      <!-- Tabs Navigation -->
+      <!-- Tabs Navigation (Consolidated to 5 clean primary tabs) -->
       <div class="bt-tabs">
         <div class="bt-tabs-inner">
           <div class="bt-tab active" data-tab="translate" data-i18n="popup.tabTranslate">Translate</div>
-          <div class="bt-tab" data-tab="general" data-i18n="popup.tabGeneral">Settings</div>
-          <div class="bt-tab" data-tab="shortcuts" data-i18n="popup.tabShortcuts">Shortcuts</div>
-          <div class="bt-tab" data-tab="instant" data-i18n="popup.tabInstant">Quick Translate</div>
-          <div class="bt-tab" data-tab="auto-page" data-i18n="popup.tabAutoPage">Auto Translate</div>
-          <div class="bt-tab" data-tab="history" data-i18n="popup.tabHistory">History</div>
-          <div class="bt-tab" data-tab="favorites" data-i18n="popup.tabFavorites">Saved</div>
-          <div class="bt-tab" data-tab="tts" data-i18n="popup.tabTTS">Voice</div>
-          <div class="bt-tab" data-tab="ai-provider" data-i18n="popup.tabAIProvider">AI Model</div>
+          <div class="bt-tab" data-tab="settings" data-i18n="popup.tabSettings">Settings</div>
+          <div class="bt-tab" data-tab="tools" data-i18n="popup.tabTools">Features</div>
+          <div class="bt-tab" data-tab="history" data-i18n="popup.tabHistoryAndSaved">History</div>
+          <div class="bt-tab" data-tab="ai" data-i18n="popup.tabAI">AI Providers</div>
         </div>
       </div>
 
       <div id="settings-container" class="bt-settings-container">
-        <!-- General Tab Content -->
-        <div id="tab-general" class="bt-tab-content">
-          <div class="bt-tab-header-group">
-            <div class="bt-list-header">
-              <h3 data-i18n="popup.tabGeneral">Settings</h3>
-            </div>
-            <div class="bt-section-desc" data-i18n="popup.generalDesc">
-              Manage languages, shortcuts, and quick keys.
-            </div>
-          </div>
-
-          <!-- Language Settings Card -->
-          <div class="bt-card">
-            <div class="bt-row">
-              <div class="bt-field">
-                <label for="native" data-i18n="popup.nativeLanguage">Native Language</label>
-                <select id="native" class="bt-input"></select>
-              </div>
-
-              <div class="bt-field">
-                <label for="target" data-i18n="popup.defaultTarget">Default Target</label>
-                <select id="target" class="bt-input"></select>
-              </div>
-            </div>
-
-            <div class="bt-field-row" style="justify-content: space-between">
-              <div style="display: flex; align-items: center; gap: 8px">
-                <label class="bt-switch">
-                  <input type="checkbox" id="auto-detect" />
-                  <span class="slider round"></span>
-                </label>
-                <label for="auto-detect" data-i18n="popup.useAutoDetect">Auto-detect Source Language</label>
-              </div>
-            </div>
-
-            <div class="bt-field-row" style="justify-content: space-between">
-              <div style="display: flex; align-items: center; gap: 8px">
-                <label class="bt-switch">
-                  <input type="checkbox" id="confirm-modal" />
-                  <span class="slider round"></span>
-                </label>
-                <label for="confirm-modal" data-i18n="popup.showConfirmModal">Show Confirm Modal</label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Aliases Card -->
-          <div class="bt-card">
-            <div class="bt-field">
-              <label data-i18n="popup.aliases" style="font-weight: 600">Aliases</label>
-              <div class="bt-alias-input-group">
-                <input
-                  type="text"
-                  id="alias-key"
-                  placeholder="Key (e.g. e)"
-                  data-i18n-placeholder="popup.aliasKeyPlaceholder"
-                />
-                <input
-                  type="text"
-                  id="alias-value"
-                  placeholder="Code (e.g. en)"
-                  data-i18n-placeholder="popup.aliasValuePlaceholder"
-                />
-                <button id="add-alias" class="bt-button-small">+</button>
-              </div>
-              <div id="alias-list" class="bt-alias-list"></div>
-            </div>
-          </div>
-
-          <!-- Hover Translate Card -->
-          <div class="bt-card">
-            <div class="bt-field-row" style="justify-content: space-between">
-              <div style="display: flex; align-items: center; gap: 8px">
-                <label class="bt-switch">
-                  <input type="checkbox" id="hover-translate-enabled" />
-                  <span class="slider round"></span>
-                </label>
-                <label for="hover-translate-enabled" data-i18n="popup.enableHover">Enable Hover to Translate</label>
-              </div>
-            </div>
-
-            <div id="hover-settings" class="bt-hover-settings bt-animate-expand" hidden>
-              <div class="bt-divider"></div>
-              <div class="bt-field">
-                <label for="hover-mode" data-i18n="popup.hoverMode">Translation Mode</label>
-                <select id="hover-mode" class="bt-input">
-                  <option value="inject" data-i18n="popup.hoverModeInject">Inject Below (Recommended)</option>
-                  <option value="replace" data-i18n="popup.hoverModeReplace">Replace Original</option>
-                </select>
-                <small data-i18n="popup.hoverModeHint">Inject adds translation below. Replace swaps text.</small>
-              </div>
-
-              <div class="bt-field">
-                <label for="hover-granularity" data-i18n="popup.hoverGranularity">Translation Granularity</label>
-                <select id="hover-granularity" class="bt-input">
-                  <option value="block" data-i18n="popup.granularityBlock">Block (Entire Paragraph)</option>
-                  <option value="line" data-i18n="popup.granularityLine">Line by Line</option>
-                  <option value="sentence" data-i18n="popup.granularitySentence">Sentence by Sentence</option>
-                </select>
-              </div>
-
-              <div class="bt-field-row" style="justify-content: space-between; margin-top: 4px">
-                <div style="display: flex; align-items: center; gap: 8px">
-                  <label class="bt-switch">
-                    <input type="checkbox" id="hover-unique-mode" checked />
-                    <span class="slider round"></span>
-                  </label>
-                  <label for="hover-unique-mode" data-i18n="popup.uniqueMode">Unique Mode</label>
-                </div>
-              </div>
-
-              <div class="bt-field">
-                <label for="hover-modifier" data-i18n="popup.modifierKey">Modifier Key</label>
-                <select id="hover-modifier" class="bt-input">
-                  <option value="ctrl">Ctrl</option>
-                  <option value="shift">Shift</option>
-                  <option value="alt">Alt</option>
-                </select>
-              </div>
-
-              <div class="bt-divider"></div>
-              <div class="bt-field">
-                <label data-i18n="popup.injectStyle">Inject Style</label>
-                <div class="bt-hover-style-config">
-                  <div class="bt-row">
-                    <div class="bt-field">
-                      <label for="hover-text-color" data-i18n="popup.textColor">Text Color</label>
-                      <input type="color" id="hover-text-color" value="#ff0000" />
-                    </div>
-                    <div class="bt-field">
-                      <label for="hover-font-size" data-i18n="popup.fontSize">Font Size</label>
-                      <select id="hover-font-size" class="bt-input">
-                        <option value="0.85em" data-i18n="popup.fontSizeSmall">Small</option>
-                        <option value="0.95em" selected data-i18n="popup.fontSizeNormal">Normal</option>
-                        <option value="1em" data-i18n="popup.fontSizeLarge">Large</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div class="bt-field-row" style="justify-content: space-between; margin-top: 12px">
-                    <div style="display: flex; align-items: center; gap: 8px">
-                      <label class="bt-switch">
-                        <input type="checkbox" id="hover-show-icon" checked />
-                        <span class="slider round"></span>
-                      </label>
-                      <label for="hover-show-icon" data-i18n="popup.showIcon">Show Translation Icon</label>
-                    </div>
-                  </div>
-
-                  <div class="bt-field-row" style="justify-content: space-between">
-                    <div style="display: flex; align-items: center; gap: 8px">
-                      <label class="bt-switch">
-                        <input type="checkbox" id="hover-underline" />
-                        <span class="slider round"></span>
-                      </label>
-                      <label for="hover-underline" data-i18n="popup.underline">Underline Translation</label>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="bt-divider"></div>
-              <div class="bt-field">
-                <label data-i18n="popup.activeDomains">Active Domains</label>
-                <button id="manage-hover-domains" class="bt-button bt-button-outline" style="width: 100%">
-                  <span data-i18n="popup.manageDomains">Manage Domains</span> (<span id="hover-domain-count">0</span>)
-                </button>
-                <div id="hover-domain-list-section" class="bt-domain-list-section bt-animate-expand" hidden>
-                  <div id="hover-domain-list" class="bt-domain-list"></div>
-                  <div class="bt-domain-input-group">
-                    <input
-                      type="text"
-                      id="new-hover-domain"
-                      placeholder="discord.com"
-                      data-i18n-placeholder="popup.domainPlaceholder"
-                    />
-                    <button id="add-hover-domain" class="bt-button-small">+</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Translate Tab Content -->
+        <!-- 1. Translate Tab Content -->
         <div id="tab-translate" class="bt-tab-content active">
           <!-- Source Section (Your Language) -->
           <div class="bt-translate-section source-section">
@@ -336,19 +190,59 @@
           <div id="translate-status-message" class="bt-translate-status" style="display: none"></div>
         </div>
 
-        <!-- Instant Tab Content -->
-        <div id="tab-instant" class="bt-tab-content">
+        <!-- 2. History Tab Content -->
+        <div id="tab-history" class="bt-tab-content">
           <div class="bt-tab-header-group">
             <div class="bt-list-header">
-              <h3 data-i18n="popup.tabInstant">Quick Translate</h3>
+              <h3 data-i18n="popup.tabHistoryAndSaved">History</h3>
+              <button id="clear-history" class="bt-btn-text" data-i18n="popup.clear">Clear</button>
             </div>
-            <div class="bt-section-desc" data-i18n="popup.instantDesc">
-              Translate text automatically while typing on specific websites.
+            <div class="bt-section-desc" data-i18n="popup.historyDesc">
+              View, search, or clear your recent translation history.
             </div>
           </div>
 
-          <!-- Enable Instant Toggle Card -->
+          <!-- Sub-tab switch button row -->
+          <div class="bt-sub-tabs">
+            <button id="btn-sub-history" class="bt-sub-tab active" data-sub="history-panel">
+              <span data-i18n="popup.tabHistory">History</span>
+            </button>
+            <button id="btn-sub-favorites" class="bt-sub-tab" data-sub="favorites-panel">
+              <span data-i18n="popup.tabFavorites">Saved</span>
+            </button>
+          </div>
+
+          <!-- Sub Panel: History List -->
+          <div id="panel-history" class="bt-sub-panel active">
+            <div id="history-list" class="bt-history-list">
+              <!-- Dynamically populated or falls back to empty state -->
+            </div>
+          </div>
+
+          <!-- Sub Panel: Favorites List -->
+          <div id="panel-favorites" class="bt-sub-panel" style="display: none">
+            <div id="favorites-list" class="bt-history-list">
+              <!-- Dynamically populated or falls back to empty state -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Features/Tools Tab Content -->
+        <div id="tab-tools" class="bt-tab-content">
+          <div class="bt-tab-header-group">
+            <div class="bt-list-header">
+              <h3 data-i18n="popup.tabTools">Features</h3>
+            </div>
+            <div class="bt-section-desc">
+              Enable and customize advanced translation tools for input fields, web pages, and speech output.
+            </div>
+          </div>
+
+          <!-- Card A: Quick Translate -->
           <div class="bt-card">
+            <div class="bt-card-header">
+              <h4 style="margin: 0; font-size: 14px; font-weight: 600" data-i18n="popup.tabInstant">Quick Translate</h4>
+            </div>
             <div class="bt-field-row" style="justify-content: space-between">
               <div style="display: flex; align-items: center; gap: 8px">
                 <label class="bt-switch">
@@ -360,21 +254,16 @@
                 >
               </div>
             </div>
-          </div>
 
-          <!-- Instant Settings Expansion Wrapper to preserve JS state display -->
-          <div id="instant-settings" class="bt-animate-expand" hidden>
-            <!-- Card 1: Delay settings -->
-            <div class="bt-card" style="margin-top: 1rem">
+            <!-- Instant Settings expansion -->
+            <div id="instant-settings" class="bt-animate-expand" hidden>
+              <div class="bt-divider" style="margin: 0.75rem 0"></div>
               <div class="bt-field">
                 <label for="instant-delay" data-i18n="popup.instantDelay">Delay (seconds)</label>
                 <input type="number" id="instant-delay" class="bt-input" min="1" max="10" value="3" />
               </div>
-            </div>
 
-            <!-- Card 2: Domains -->
-            <div class="bt-card" style="margin-top: 1rem">
-              <div class="bt-field">
+              <div class="bt-field" style="margin-top: 12px">
                 <label data-i18n="popup.activeDomains">Active Domains</label>
                 <div id="instant-domain-list" class="bt-domain-list"></div>
                 <div class="bt-domain-input-group">
@@ -389,21 +278,12 @@
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Auto Page Translate Tab Content -->
-        <div id="tab-auto-page" class="bt-tab-content">
-          <div class="bt-tab-header-group">
-            <div class="bt-list-header">
-              <h3 data-i18n="popup.tabAutoPage">Auto Translate</h3>
-            </div>
-            <div class="bt-section-desc" data-i18n="popup.autoPageDesc">
-              Translate entire webpages automatically when loaded.
-            </div>
-          </div>
-
-          <!-- Card 1: Toggle & Actions -->
+          <!-- Card B: Auto Page Translate -->
           <div class="bt-card">
+            <div class="bt-card-header">
+              <h4 style="margin: 0; font-size: 14px; font-weight: 600" data-i18n="popup.tabAutoPage">Auto Translate</h4>
+            </div>
             <div class="bt-field-row" style="justify-content: space-between">
               <div style="display: flex; align-items: center; gap: 8px">
                 <label class="bt-switch">
@@ -416,12 +296,56 @@
               </div>
             </div>
 
-            <div class="bt-divider" style="margin: 0.5rem 0"></div>
+            <div class="bt-divider" style="margin: 0.75rem 0"></div>
+
+            <div class="bt-field-row" style="justify-content: space-between; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 2px">
+                <label for="use-google-proxy" style="font-weight: 600; cursor: pointer" data-i18n="popup.useGoogleProxy"
+                  >Use Proxy for Google Translate</label
+                >
+                <small style="color: #888; font-size: 0.85em" data-i18n="popup.useGoogleProxyHint"
+                  >Route Google Translate requests through local backend server to bypass local network blocks.</small
+                >
+              </div>
+              <label class="bt-switch">
+                <input type="checkbox" id="use-google-proxy" />
+                <span class="slider round"></span>
+              </label>
+            </div>
+
+            <div class="bt-field-row" style="margin-top: 8px">
+              <button
+                id="btn-test-google-proxy"
+                class="bt-button bt-button-outline"
+                style="
+                  height: 32px;
+                  padding: 0 12px;
+                  font-size: 12px;
+                  width: 100%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  gap: 6px;
+                "
+                data-i18n="button.testConnection"
+              >
+                Test Connection
+              </button>
+            </div>
+
+            <div class="bt-divider" style="margin: 0.75rem 0"></div>
 
             <button
               id="btn-translate-now"
               class="bt-button"
-              style="width: 100%; gap: 8px; display: flex; align-items: center; justify-content: center"
+              style="
+                width: 100%;
+                gap: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                margin-bottom: 8px;
+              "
             >
               <svg
                 width="16"
@@ -457,16 +381,7 @@
                   padding: 0 12px;
                 "
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                   <polyline points="7 10 12 15 17 10"></polyline>
                   <line x1="12" y1="15" x2="12" y2="3"></line>
@@ -486,16 +401,7 @@
                   padding: 0 12px;
                 "
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                   <polyline points="17 8 12 3 7 8"></polyline>
                   <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -504,12 +410,10 @@
               </button>
               <input type="file" id="import-file-input" accept=".json" style="display: none" />
             </div>
-          </div>
 
-          <!-- Wrap settings in #auto-page-settings to preserve JS logic -->
-          <div id="auto-page-settings" class="bt-animate-expand" hidden>
-            <!-- Card 2: Active Domains -->
-            <div class="bt-card" style="margin-top: 1rem">
+            <!-- Auto Page settings domains list -->
+            <div id="auto-page-settings" class="bt-animate-expand" hidden>
+              <div class="bt-divider" style="margin: 0.75rem 0"></div>
               <div class="bt-field">
                 <label data-i18n="popup.activeDomains">Active Domains</label>
                 <div id="auto-page-domain-list" class="bt-domain-list"></div>
@@ -525,267 +429,12 @@
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Shortcuts Tab Content -->
-        <div id="tab-shortcuts" class="bt-tab-content">
-          <div class="bt-tab-header-group">
-            <div class="bt-list-header">
-              <h3 data-i18n="popup.tabShortcuts">Shortcuts</h3>
-            </div>
-            <div class="bt-section-desc" data-i18n="popup.shortcutsDesc">
-              Configure and manage keyboard shortcuts for extension tasks.
-            </div>
-          </div>
-
-          <!-- Card 1: OCR Capture Switch -->
+          <!-- Card C: TTS Voice settings -->
           <div class="bt-card">
-            <div class="bt-field-row" style="justify-content: space-between; align-items: center">
-              <div style="display: flex; flex-direction: column; gap: 4px">
-                <label for="ocr-enabled" style="font-weight: 600; cursor: pointer" data-i18n="popup.enableOcr"
-                  >Enable OCR Translation (Alt+Shift+O)</label
-                >
-                <small style="color: #888" data-i18n="popup.ocrToggleHint"
-                  >Turn on or off the screenshot text recognition feature.</small
-                >
-              </div>
-              <label class="bt-switch">
-                <input type="checkbox" id="ocr-enabled" checked />
-                <span class="slider round"></span>
-              </label>
+            <div class="bt-card-header">
+              <h4 style="margin: 0; font-size: 14px; font-weight: 600" data-i18n="popup.ttsSettings">Voice settings</h4>
             </div>
-            <div class="bt-divider" style="margin: 0.75rem 0"></div>
-            <div class="bt-field">
-              <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
-                <div style="display: flex; flex-direction: column; gap: 2px">
-                  <label style="font-weight: 600" data-i18n="popup.shortcutsGuide">System Shortcut</label>
-                  <small style="color: #888">Alt+Shift+O (⌥⇧O)</small>
-                </div>
-                <button
-                  id="btn-open-chrome-shortcuts"
-                  class="bt-button bt-button-outline"
-                  style="height: 32px; padding: 0 12px; font-size: 12px; width: auto"
-                  data-i18n="popup.openChromeShortcuts"
-                >
-                  Configure in Chrome
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Card 2: Quick Translate Shortcut -->
-          <div class="bt-card" style="margin-top: 1rem">
-            <div class="bt-field">
-              <label data-i18n="popup.toggleShortcut" style="font-weight: 600">Toggle Instant Shortcut</label>
-              <div class="bt-shortcut-compact" style="margin-top: 6px">
-                <div class="bt-shortcut-modifiers">
-                  <label>
-                    <input type="checkbox" id="shortcut-ctrl" checked />
-                    <span data-i18n="popup.shortcutCtrl">Ctrl/Cmd</span>
-                  </label>
-                  <label>
-                    <input type="checkbox" id="shortcut-shift" checked />
-                    <span data-i18n="popup.shortcutShift">Shift</span>
-                  </label>
-                  <label>
-                    <input type="checkbox" id="shortcut-alt" />
-                    <span data-i18n="popup.shortcutAlt">Alt</span>
-                  </label>
-                  <span style="margin: 0 8px; color: #888">+</span>
-                  <input
-                    type="text"
-                    id="shortcut-key"
-                    class="bt-input"
-                    maxlength="1"
-                    value="I"
-                    style="width: 50px; text-align: center; text-transform: uppercase"
-                  />
-                </div>
-                <div class="bt-shortcut-preview">
-                  <small id="shortcut-preview" style="color: #888">Ctrl+Shift+I (Cmd+Shift+I on Mac)</small>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Card 3: Hover Translate Shortcut -->
-          <div class="bt-card" style="margin-top: 1rem">
-            <div class="bt-field">
-              <label data-i18n="popup.shortcutHover" style="font-weight: 600">Toggle Hover Shortcut</label>
-              <div class="bt-shortcut-compact" style="margin-top: 6px">
-                <div class="bt-shortcut-modifiers">
-                  <label>
-                    <input type="checkbox" id="hover-shortcut-ctrl" checked />
-                    <span data-i18n="popup.shortcutCtrl">Ctrl/Cmd</span>
-                  </label>
-                  <label>
-                    <input type="checkbox" id="hover-shortcut-shift" checked />
-                    <span data-i18n="popup.shortcutShift">Shift</span>
-                  </label>
-                  <label>
-                    <input type="checkbox" id="hover-shortcut-alt" />
-                    <span data-i18n="popup.shortcutAlt">Alt</span>
-                  </label>
-                  <span style="margin: 0 8px; color: #888">+</span>
-                  <input
-                    type="text"
-                    id="hover-shortcut-key"
-                    class="bt-input"
-                    maxlength="1"
-                    value="O"
-                    style="width: 50px; text-align: center; text-transform: uppercase"
-                  />
-                </div>
-                <div class="bt-shortcut-preview">
-                  <small id="hover-shortcut-preview" style="color: #888">Ctrl+Shift+O (Cmd+Shift+O on Mac)</small>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Card 4: Auto Translate Shortcut -->
-          <div class="bt-card" style="margin-top: 1rem">
-            <div class="bt-field">
-              <label data-i18n="popup.toggleShortcutAutoPage" style="font-weight: 600">Toggle Auto Page Shortcut</label>
-              <div class="bt-shortcut-compact" style="margin-top: 6px">
-                <div class="bt-shortcut-modifiers">
-                  <label>
-                    <input type="checkbox" id="auto-page-shortcut-ctrl" checked />
-                    <span data-i18n="popup.shortcutCtrl">Ctrl/Cmd</span>
-                  </label>
-                  <label>
-                    <input type="checkbox" id="auto-page-shortcut-shift" checked />
-                    <span data-i18n="popup.shortcutShift">Shift</span>
-                  </label>
-                  <label>
-                    <input type="checkbox" id="auto-page-shortcut-alt" />
-                    <span data-i18n="popup.shortcutAlt">Alt</span>
-                  </label>
-                  <span style="margin: 0 8px; color: #888">+</span>
-                  <input
-                    type="text"
-                    id="auto-page-shortcut-key"
-                    class="bt-input"
-                    maxlength="1"
-                    value="P"
-                    style="width: 50px; text-align: center; text-transform: uppercase"
-                  />
-                </div>
-                <div class="bt-shortcut-preview">
-                  <small id="auto-page-shortcut-preview" style="color: #888">Ctrl+Shift+P (Cmd+Shift+P on Mac)</small>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- AI Provider Tab Content -->
-        <div id="tab-ai-provider" class="bt-tab-content">
-          <div class="bt-tab-header-group">
-            <div class="bt-list-header">
-              <h3 data-i18n="popup.tabAIProvider">AI Model</h3>
-            </div>
-            <div class="bt-section-desc" data-i18n="popup.aiProviderDesc">
-              Connect your custom AI models, API keys, and translation prompts.
-            </div>
-          </div>
-
-          <!-- Card 1: Providers List -->
-          <div class="bt-card">
-            <div class="bt-provider-list-container">
-              <div id="provider-list" class="bt-provider-list">
-                <!-- Provider items will be injected here -->
-              </div>
-              <button
-                id="btn-add-provider"
-                class="bt-button bt-button-outline"
-                data-i18n="popup.addProvider"
-                style="width: 100%; margin-top: 0.5rem"
-              >
-                + Add Provider
-              </button>
-            </div>
-
-            <!-- Add/Edit Provider Form (Hidden by default) -->
-            <div id="provider-form" class="bt-provider-form bt-animate-expand" hidden>
-              <h3 id="form-title" class="bt-form-title">Add Provider</h3>
-
-              <div class="bt-field">
-                <label data-i18n="popup.providerType">Provider Type</label>
-                <select id="form-type" class="bt-input">
-                  <option value="openai">OpenAI</option>
-                </select>
-              </div>
-
-              <div class="bt-field">
-                <label data-i18n="popup.providerName">Name</label>
-                <input
-                  type="text"
-                  id="form-name"
-                  class="bt-input"
-                  placeholder="e.g. My ChatGPT"
-                  data-i18n-placeholder="popup.providerNamePlaceholder"
-                />
-              </div>
-
-              <!-- Dynamic Fields Container -->
-              <div id="form-dynamic-fields"></div>
-
-              <div class="bt-actions bt-row" style="margin-top: 1rem">
-                <button id="form-cancel" class="bt-button bt-button-outline" data-i18n="dialog.cancel" style="flex: 1">
-                  Cancel
-                </button>
-                <button id="form-save" class="bt-button" data-i18n="popup.save" style="flex: 1">Save</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Card 2: Prompt Customization -->
-          <div id="prompt-customization" class="bt-card">
-            <h3
-              class="bt-section-title"
-              data-i18n="popup.promptCustomization"
-              style="font-size: var(--bt-font-size-medium)"
-            >
-              Prompt Customization
-            </h3>
-            <p class="bt-help-text" data-i18n="popup.promptHelp" style="margin-top: 0">
-              Customize the translation prompts to fit your specific needs (e.g., technical, casual, medical)
-            </p>
-
-            <div class="bt-field">
-              <label for="system-prompt-display" data-i18n="popup.systemPrompt">System Prompt (Read-only)</label>
-              <textarea id="system-prompt-display" class="bt-input bt-readonly-textarea" readonly rows="3"></textarea>
-            </div>
-
-            <div class="bt-field">
-              <label for="user-custom-prompt" data-i18n="popup.userPrompt">Your Custom Context (Optional)</label>
-              <textarea
-                id="user-custom-prompt"
-                class="bt-input"
-                maxlength="500"
-                rows="4"
-                placeholder=""
-                data-i18n-placeholder="popup.promptPlaceholder"
-              ></textarea>
-              <small class="bt-char-counter"><span id="prompt-char-count">0</span>/500</small>
-            </div>
-          </div>
-        </div>
-
-        <!-- TTS Tab Content -->
-        <div id="tab-tts" class="bt-tab-content">
-          <div class="bt-tab-header-group">
-            <div class="bt-list-header">
-              <h3 data-i18n="popup.ttsSettings">Text-to-Speech</h3>
-            </div>
-            <div class="bt-section-desc" data-i18n="popup.ttsDesc">
-              Hear your translations read aloud with text-to-speech.
-            </div>
-          </div>
-
-          <!-- Card 1: TTS Providers list -->
-          <div class="bt-card">
             <div id="tts-provider-list" class="bt-provider-list">
               <!-- TTS Providers injected here -->
             </div>
@@ -849,39 +498,460 @@
           </div>
         </div>
 
-        <!-- History Tab Content -->
-        <div id="tab-history" class="bt-tab-content">
+        <!-- 5. Settings Tab Content -->
+        <div id="tab-settings" class="bt-tab-content">
           <div class="bt-tab-header-group">
             <div class="bt-list-header">
-              <h3 data-i18n="popup.recentTranslations">Recent Translations</h3>
-              <button id="clear-history" class="bt-btn-text" data-i18n="popup.clear">Clear</button>
+              <h3 data-i18n="popup.tabSettings">Settings</h3>
             </div>
-            <div class="bt-section-desc" data-i18n="popup.historyDesc">
-              View, search, or clear your recent translation history.
+            <div class="bt-section-desc" data-i18n="popup.generalDesc">
+              Manage languages, keyboard shortcuts, and quick keys.
             </div>
           </div>
 
-          <div id="history-list" class="bt-history-list">
-            <!-- History items will be injected here -->
+          <!-- Card 1: Language Settings -->
+          <div class="bt-card">
+            <div class="bt-card-header">
+              <h4 style="margin: 0; font-size: 14px; font-weight: 600" data-i18n="popup.tabGeneral">Settings</h4>
+            </div>
+            <div class="bt-row">
+              <div class="bt-field">
+                <label for="native" data-i18n="popup.nativeLanguage">Native Language</label>
+                <select id="native" class="bt-input"></select>
+              </div>
+
+              <div class="bt-field">
+                <label for="target" data-i18n="popup.defaultTarget">Default Target</label>
+                <select id="target" class="bt-input"></select>
+              </div>
+            </div>
+
+            <div class="bt-field-row" style="justify-content: space-between">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <label class="bt-switch">
+                  <input type="checkbox" id="auto-detect" />
+                  <span class="slider round"></span>
+                </label>
+                <label for="auto-detect" data-i18n="popup.useAutoDetect">Auto-detect Source Language</label>
+              </div>
+            </div>
+
+            <div class="bt-field-row" style="justify-content: space-between">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <label class="bt-switch">
+                  <input type="checkbox" id="confirm-modal" />
+                  <span class="slider round"></span>
+                </label>
+                <label for="confirm-modal" data-i18n="popup.showConfirmModal">Show Confirm Modal</label>
+              </div>
+            </div>
+
+            <div class="bt-field-row" style="justify-content: space-between">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <label class="bt-switch">
+                  <input type="checkbox" id="right-click-unlocker-enabled" />
+                  <span class="slider round"></span>
+                </label>
+                <label for="right-click-unlocker-enabled" data-i18n="popup.enableRightClickUnlocker"
+                  >Enable Right-Click & Selection Unlocker</label
+                >
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Aliases -->
+          <div class="bt-card">
+            <div class="bt-field">
+              <label data-i18n="popup.aliases" style="font-weight: 600">Aliases</label>
+              <div class="bt-alias-input-group">
+                <input
+                  type="text"
+                  id="alias-key"
+                  placeholder="Key (e.g. e)"
+                  data-i18n-placeholder="popup.aliasKeyPlaceholder"
+                />
+                <input
+                  type="text"
+                  id="alias-value"
+                  placeholder="Code (e.g. en)"
+                  data-i18n-placeholder="popup.aliasValuePlaceholder"
+                />
+                <button id="add-alias" class="bt-button-small">+</button>
+              </div>
+              <div id="alias-list" class="bt-alias-list"></div>
+            </div>
+          </div>
+
+          <!-- Card 3: Hover Translate -->
+          <div class="bt-card">
+            <div class="bt-card-header">
+              <h4 style="margin: 0; font-size: 14px; font-weight: 600" data-i18n="popup.enableHover">
+                Hover to Translate
+              </h4>
+            </div>
+            <div class="bt-field-row" style="justify-content: space-between">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <label class="bt-switch">
+                  <input type="checkbox" id="hover-translate-enabled" />
+                  <span class="slider round"></span>
+                </label>
+                <label for="hover-translate-enabled" data-i18n="popup.enableHover">Enable Hover to Translate</label>
+              </div>
+            </div>
+
+            <div id="hover-settings" class="bt-hover-settings bt-animate-expand" hidden>
+              <div class="bt-divider" style="margin: 0.75rem 0"></div>
+              <div class="bt-field">
+                <label for="hover-mode" data-i18n="popup.hoverMode">Translation Mode</label>
+                <select id="hover-mode" class="bt-input">
+                  <option value="inject" data-i18n="popup.hoverModeInject">Inject Below (Recommended)</option>
+                  <option value="replace" data-i18n="popup.hoverModeReplace">Replace Original</option>
+                </select>
+                <small data-i18n="popup.hoverModeHint">Inject adds translation below. Replace swaps text.</small>
+              </div>
+
+              <div class="bt-field">
+                <label for="hover-granularity" data-i18n="popup.hoverGranularity">Translation Granularity</label>
+                <select id="hover-granularity" class="bt-input">
+                  <option value="block" data-i18n="popup.granularityBlock">Block (Entire Paragraph)</option>
+                  <option value="line" data-i18n="popup.granularityLine">Line by Line</option>
+                  <option value="sentence" data-i18n="popup.granularitySentence">Sentence by Sentence</option>
+                </select>
+              </div>
+
+              <div class="bt-field-row" style="justify-content: space-between; margin-top: 4px">
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <label class="bt-switch">
+                    <input type="checkbox" id="hover-unique-mode" checked />
+                    <span class="slider round"></span>
+                  </label>
+                  <label for="hover-unique-mode" data-i18n="popup.uniqueMode">Unique Mode</label>
+                </div>
+              </div>
+
+              <div class="bt-field">
+                <label for="hover-modifier" data-i18n="popup.modifierKey">Modifier Key</label>
+                <select id="hover-modifier" class="bt-input">
+                  <option value="ctrl">Ctrl</option>
+                  <option value="shift">Shift</option>
+                  <option value="alt">Alt</option>
+                </select>
+              </div>
+
+              <div class="bt-divider" style="margin: 0.75rem 0"></div>
+              <div class="bt-field">
+                <label data-i18n="popup.injectStyle">Inject Style</label>
+                <div class="bt-hover-style-config">
+                  <div class="bt-row">
+                    <div class="bt-field">
+                      <label for="hover-text-color" data-i18n="popup.textColor">Text Color</label>
+                      <input type="color" id="hover-text-color" value="#ff0000" />
+                    </div>
+                    <div class="bt-field">
+                      <label for="hover-font-size" data-i18n="popup.fontSize">Font Size</label>
+                      <select id="hover-font-size" class="bt-input">
+                        <option value="0.85em" data-i18n="popup.fontSizeSmall">Small</option>
+                        <option value="0.95em" selected data-i18n="popup.fontSizeNormal">Normal</option>
+                        <option value="1em" data-i18n="popup.fontSizeLarge">Large</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="bt-field-row" style="justify-content: space-between; margin-top: 12px">
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <label class="bt-switch">
+                        <input type="checkbox" id="hover-show-icon" checked />
+                        <span class="slider round"></span>
+                      </label>
+                      <label for="hover-show-icon" data-i18n="popup.showIcon">Show Translation Icon</label>
+                    </div>
+                  </div>
+
+                  <div class="bt-field-row" style="justify-content: space-between">
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <label class="bt-switch">
+                        <input type="checkbox" id="hover-underline" />
+                        <span class="slider round"></span>
+                      </label>
+                      <label for="hover-underline" data-i18n="popup.underline">Underline Translation</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bt-divider" style="margin: 0.75rem 0"></div>
+              <div class="bt-field">
+                <label data-i18n="popup.activeDomains">Active Domains</label>
+                <button id="manage-hover-domains" class="bt-button bt-button-outline" style="width: 100%">
+                  <span data-i18n="popup.manageDomains">Manage Domains</span> (<span id="hover-domain-count">0</span>)
+                </button>
+                <div id="hover-domain-list-section" class="bt-domain-list-section bt-animate-expand" hidden>
+                  <div id="hover-domain-list" class="bt-domain-list"></div>
+                  <div class="bt-domain-input-group">
+                    <input
+                      type="text"
+                      id="new-hover-domain"
+                      placeholder="discord.com"
+                      data-i18n-placeholder="popup.domainPlaceholder"
+                    />
+                    <button id="add-hover-domain" class="bt-button-small">+</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 4: Keyboard Shortcuts -->
+          <div class="bt-card">
+            <div class="bt-card-header">
+              <h4 style="margin: 0; font-size: 14px; font-weight: 600" data-i18n="popup.tabShortcuts">Shortcuts</h4>
+            </div>
+            <!-- OCR Capture Switch -->
+            <div class="bt-field-row" style="justify-content: space-between; align-items: center">
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <label for="ocr-enabled" style="font-weight: 600; cursor: pointer" data-i18n="popup.enableOcr"
+                  >Enable OCR Translation (Alt+Shift+O)</label
+                >
+                <small style="color: #888" data-i18n="popup.ocrToggleHint"
+                  >Turn on or off the screenshot text recognition feature.</small
+                >
+              </div>
+              <label class="bt-switch">
+                <input type="checkbox" id="ocr-enabled" checked />
+                <span class="slider round"></span>
+              </label>
+            </div>
+            <div class="bt-divider" style="margin: 0.75rem 0"></div>
+            <div class="bt-field">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+                <div style="display: flex; flex-direction: column; gap: 2px">
+                  <label style="font-weight: 600" data-i18n="popup.shortcutsGuide">System Shortcut</label>
+                  <small style="color: #888">Alt+Shift+O (⌥⇧O)</small>
+                </div>
+                <button
+                  id="btn-open-chrome-shortcuts"
+                  class="bt-button bt-button-outline"
+                  style="height: 32px; padding: 0 12px; font-size: 12px; width: auto"
+                  data-i18n="popup.openChromeShortcuts"
+                >
+                  Configure in Chrome
+                </button>
+              </div>
+            </div>
+
+            <div class="bt-divider" style="margin: 0.75rem 0"></div>
+
+            <!-- Quick Translate Shortcut -->
+            <div class="bt-field">
+              <label data-i18n="popup.toggleShortcut" style="font-weight: 600">Toggle Instant Shortcut</label>
+              <div class="bt-shortcut-compact" style="margin-top: 6px">
+                <div class="bt-shortcut-modifiers">
+                  <label>
+                    <input type="checkbox" id="shortcut-ctrl" checked />
+                    <span data-i18n="popup.shortcutCtrl">Ctrl/Cmd</span>
+                  </label>
+                  <label>
+                    <input type="checkbox" id="shortcut-shift" checked />
+                    <span data-i18n="popup.shortcutShift">Shift</span>
+                  </label>
+                  <label>
+                    <input type="checkbox" id="shortcut-alt" />
+                    <span data-i18n="popup.shortcutAlt">Alt</span>
+                  </label>
+                  <span style="margin: 0 8px; color: #888">+</span>
+                  <input
+                    type="text"
+                    id="shortcut-key"
+                    class="bt-input"
+                    maxlength="1"
+                    value="I"
+                    style="width: 50px; text-align: center; text-transform: uppercase"
+                  />
+                </div>
+                <div class="bt-shortcut-preview">
+                  <small id="shortcut-preview" style="color: #888">Ctrl+Shift+I (Cmd+Shift+I on Mac)</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="bt-divider" style="margin: 0.75rem 0"></div>
+
+            <!-- Hover Translate Shortcut -->
+            <div class="bt-field">
+              <label data-i18n="popup.shortcutHover" style="font-weight: 600">Toggle Hover Shortcut</label>
+              <div class="bt-shortcut-compact" style="margin-top: 6px">
+                <div class="bt-shortcut-modifiers">
+                  <label>
+                    <input type="checkbox" id="hover-shortcut-ctrl" checked />
+                    <span data-i18n="popup.shortcutCtrl">Ctrl/Cmd</span>
+                  </label>
+                  <label>
+                    <input type="checkbox" id="hover-shortcut-shift" checked />
+                    <span data-i18n="popup.shortcutShift">Shift</span>
+                  </label>
+                  <label>
+                    <input type="checkbox" id="hover-shortcut-alt" />
+                    <span data-i18n="popup.shortcutAlt">Alt</span>
+                  </label>
+                  <span style="margin: 0 8px; color: #888">+</span>
+                  <input
+                    type="text"
+                    id="hover-shortcut-key"
+                    class="bt-input"
+                    maxlength="1"
+                    value="O"
+                    style="width: 50px; text-align: center; text-transform: uppercase"
+                  />
+                </div>
+                <div class="bt-shortcut-preview">
+                  <small id="hover-shortcut-preview" style="color: #888">Ctrl+Shift+O (Cmd+Shift+O on Mac)</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="bt-divider" style="margin: 0.75rem 0"></div>
+
+            <!-- Auto Translate Shortcut -->
+            <div class="bt-field">
+              <label data-i18n="popup.toggleShortcutAutoPage" style="font-weight: 600">Toggle Auto Page Shortcut</label>
+              <div class="bt-shortcut-compact" style="margin-top: 6px">
+                <div class="bt-shortcut-modifiers">
+                  <label>
+                    <input type="checkbox" id="auto-page-shortcut-ctrl" checked />
+                    <span data-i18n="popup.shortcutCtrl">Ctrl/Cmd</span>
+                  </label>
+                  <label>
+                    <input type="checkbox" id="auto-page-shortcut-shift" checked />
+                    <span data-i18n="popup.shortcutShift">Shift</span>
+                  </label>
+                  <label>
+                    <input type="checkbox" id="auto-page-shortcut-alt" />
+                    <span data-i18n="popup.shortcutAlt">Alt</span>
+                  </label>
+                  <span style="margin: 0 8px; color: #888">+</span>
+                  <input
+                    type="text"
+                    id="auto-page-shortcut-key"
+                    class="bt-input"
+                    maxlength="1"
+                    value="P"
+                    style="width: 50px; text-align: center; text-transform: uppercase"
+                  />
+                </div>
+                <div class="bt-shortcut-preview">
+                  <small id="auto-page-shortcut-preview" style="color: #888">Ctrl+Shift+P (Cmd+Shift+P on Mac)</small>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Favorites Tab Content -->
-        <div id="tab-favorites" class="bt-tab-content">
+        <!-- 4. AI Providers Tab Content -->
+        <div id="tab-ai" class="bt-tab-content">
           <div class="bt-tab-header-group">
             <div class="bt-list-header">
-              <h3 data-i18n="popup.savedTranslations">Saved Translations</h3>
+              <h3 data-i18n="popup.tabAI">AI Providers</h3>
             </div>
-            <div class="bt-section-desc" data-i18n="popup.favoritesDesc">
-              Quickly access your bookmarked and saved translations.
+            <div class="bt-section-desc" data-i18n="popup.aiProviderDesc">
+              Connect your custom AI models, API keys, and translation prompts.
             </div>
           </div>
 
-          <div id="favorites-list" class="bt-history-list">
-            <!-- Favorite items will be injected here -->
+          <!-- Card 5: AI Providers -->
+          <div class="bt-card">
+            <div class="bt-card-header">
+              <h4 style="margin: 0; font-size: 14px; font-weight: 600" data-i18n="popup.tabAIProvider">AI Model</h4>
+            </div>
+            <div class="bt-provider-list-container">
+              <div id="provider-list" class="bt-provider-list">
+                <!-- Provider items will be injected here -->
+              </div>
+              <button
+                id="btn-add-provider"
+                class="bt-button bt-button-outline"
+                data-i18n="popup.addProvider"
+                style="width: 100%; margin-top: 0.5rem"
+              >
+                + Add Provider
+              </button>
+            </div>
+
+            <!-- Add/Edit Provider Form (Hidden by default) -->
+            <div id="provider-form" class="bt-provider-form bt-animate-expand" hidden>
+              <h3 id="form-title" class="bt-form-title">Add Provider</h3>
+
+              <div class="bt-field">
+                <label data-i18n="popup.providerType">Provider Type</label>
+                <select id="form-type" class="bt-input">
+                  <option value="openai">OpenAI</option>
+                </select>
+              </div>
+
+              <div class="bt-field">
+                <label data-i18n="popup.providerName">Name</label>
+                <input
+                  type="text"
+                  id="form-name"
+                  class="bt-input"
+                  placeholder="e.g. My ChatGPT"
+                  data-i18n-placeholder="popup.providerNamePlaceholder"
+                />
+              </div>
+
+              <!-- Dynamic Fields Container -->
+              <div id="form-dynamic-fields"></div>
+
+              <div class="bt-actions bt-row" style="margin-top: 1rem; gap: 8px">
+                <button id="form-cancel" class="bt-button bt-button-outline" data-i18n="dialog.cancel" style="flex: 1">
+                  Cancel
+                </button>
+                <button
+                  id="form-test"
+                  class="bt-button bt-button-outline"
+                  style="flex: 1; border-color: var(--bt-color-primary); color: var(--bt-color-primary)"
+                  data-i18n="button.testConnection"
+                >
+                  Test Connection
+                </button>
+                <button id="form-save" class="bt-button" data-i18n="popup.save" style="flex: 1">Save</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 6: Custom System Prompts -->
+          <div id="prompt-customization" class="bt-card">
+            <h3
+              class="bt-section-title"
+              data-i18n="popup.promptCustomization"
+              style="font-size: var(--bt-font-size-medium)"
+            >
+              Prompt Customization
+            </h3>
+            <p class="bt-help-text" data-i18n="popup.promptHelp" style="margin-top: 0">
+              Customize the translation prompts to fit your specific needs (e.g., technical, casual, medical)
+            </p>
+
+            <div class="bt-field">
+              <label for="system-prompt-display" data-i18n="popup.systemPrompt">System Prompt (Read-only)</label>
+              <textarea id="system-prompt-display" class="bt-input bt-readonly-textarea" readonly rows="3"></textarea>
+            </div>
+
+            <div class="bt-field">
+              <label for="user-custom-prompt" data-i18n="popup.userPrompt">Your Custom Context (Optional)</label>
+              <textarea
+                id="user-custom-prompt"
+                class="bt-input"
+                maxlength="500"
+                rows="4"
+                placeholder=""
+                data-i18n-placeholder="popup.promptPlaceholder"
+              ></textarea>
+              <small class="bt-char-counter"><span id="prompt-char-count">0</span>/500</small>
+            </div>
           </div>
         </div>
 
+        <!-- Global Save Preferences button -->
         <div class="bt-actions">
           <button id="save" class="bt-button" data-i18n="popup.savePreferences">Save preferences</button>
         </div>

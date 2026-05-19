@@ -416,10 +416,24 @@
   border-radius: 6px;
   z-index: 10;
   margin-bottom: 4px;
-  overflow: hidden;
+  overflow: visible;
+}
+
+/* Invisible bridge to prevent losing hover state between the button and dropdown content */
+.bt-smart-dropdown-content::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: transparent;
 }
 
 .bt-smart-dropdown-content button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   width: 100%;
   padding: 8px 12px;
   border: none;
@@ -430,6 +444,21 @@
   cursor: pointer;
   color: var(--bt-color-text-default);
   transition: background 0.2s ease;
+}
+
+.bt-smart-dropdown-content button svg {
+  flex-shrink: 0;
+  color: var(--bt-color-primary);
+}
+
+.bt-smart-dropdown-content button:first-child {
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+}
+
+.bt-smart-dropdown-content button:last-child {
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
 }
 
 .bt-smart-dropdown-content button:hover {
@@ -583,4 +612,114 @@
 /* Keep background pattern clipped inside the rounded rect */
 .bt-selection-bg-pattern {
   overflow: hidden;
+}
+
+/* ==========================================
+   DARK MODE & PREMIUM GLASSMORPHISM OVERRIDES
+   ========================================== */
+
+/* Automatically apply dark mode styling based on system preferences or explicit .dark class */
+@media (prefers-color-scheme: dark) {
+  .bt-selection-popup {
+    background: var(--bt-glass-background);
+    border-color: var(--bt-glass-border);
+    box-shadow: var(--bt-glass-shadow);
+    color: var(--bt-color-text-default);
+  }
+
+  .bt-selection-title {
+    color: var(--bt-color-text-default);
+  }
+
+  .bt-selection-header {
+    border-bottom-color: var(--bt-color-border-default);
+  }
+
+  .bt-selection-text-container {
+    background: var(--bt-color-background-subtle);
+  }
+
+  .bt-selection-text-content {
+    color: var(--bt-color-text-default);
+  }
+
+  .bt-selection-copy-btn,
+  .bt-smart-btn,
+  .bt-smart-dropdown-content {
+    background: var(--bt-color-background-subtle);
+    border-color: var(--bt-color-border-default);
+    color: var(--bt-color-text-default);
+  }
+
+  .bt-selection-source-select,
+  .bt-selection-target-select,
+  .bt-selection-provider-select {
+    background: var(--bt-color-background-subtle);
+    border-color: var(--bt-color-border-default);
+    color: var(--bt-color-text-default);
+  }
+
+  .bt-smart-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .bt-smart-dropdown-content button:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .bt-selection-footer {
+    border-top-color: var(--bt-color-border-default);
+  }
+}
+
+/* Explicit class-based overrides in case the host site is in dark mode or popup explicitly has dark mode */
+.bt-selection-popup.dark {
+  background: var(--bt-glass-background);
+  border-color: var(--bt-glass-border);
+  box-shadow: var(--bt-glass-shadow);
+  color: var(--bt-color-text-default);
+}
+
+.bt-selection-popup.dark .bt-selection-title {
+  color: var(--bt-color-text-default);
+}
+
+.bt-selection-popup.dark .bt-selection-header {
+  border-bottom-color: var(--bt-color-border-default);
+}
+
+.bt-selection-popup.dark .bt-selection-text-container {
+  background: var(--bt-color-background-subtle);
+}
+
+.bt-selection-popup.dark .bt-selection-text-content {
+  color: var(--bt-color-text-default);
+}
+
+.bt-selection-popup.dark .bt-selection-copy-btn,
+.bt-selection-popup.dark .bt-smart-btn,
+.bt-selection-popup.dark .bt-smart-dropdown-content {
+  background: var(--bt-color-background-subtle);
+  border-color: var(--bt-color-border-default);
+  color: var(--bt-color-text-default);
+}
+
+.bt-selection-popup.dark .bt-selection-source-select,
+.bt-selection-popup.dark .bt-selection-target-select,
+.bt-selection-popup.dark .bt-selection-provider-select {
+  background: var(--bt-color-background-subtle);
+  border-color: var(--bt-color-border-default);
+  color: var(--bt-color-text-default);
+}
+
+.bt-selection-popup.dark .bt-smart-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.bt-selection-popup.dark .bt-smart-dropdown-content button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.bt-selection-popup.dark .bt-selection-footer {
+  border-top-color: var(--bt-color-border-default);
 }

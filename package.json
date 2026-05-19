@@ -9,7 +9,8 @@
     "format": "vp fmt . --write",
     "prepare": "vp config",
     "setup-ocr": "node scripts/setup-ocr.js",
-    "benchmark": "bun run benchmarks/performance-test.js"
+    "benchmark": "bun run benchmarks/performance-test.js",
+    "server": "bun run server/index.js"
   },
   "dependencies": {
     "tesseract.js": "^7.0.0"

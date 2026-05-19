@@ -1323,19 +1323,35 @@ textarea.translate-textarea:focus {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  transition: all var(--bt-transition-duration) var(--bt-ease);
+  transition:
+    transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
   box-shadow: var(--bt-shadow-sm);
 }
 
 .bt-swap-button:hover {
   border-color: var(--bt-color-primary-background);
   color: var(--bt-color-primary-background);
-  transform: scale(1.1) rotate(180deg);
+  transform: scale(1.1);
   box-shadow: 0 4px 10px rgba(99, 102, 241, 0.15);
 }
 
 .bt-swap-button:active {
-  transform: scale(0.9) rotate(180deg);
+  transform: scale(0.9);
+}
+
+.bt-swap-button.rotating {
+  transform: rotate(180deg);
+}
+
+.bt-swap-button.rotating:hover {
+  transform: rotate(180deg) scale(1.1);
+}
+
+.bt-swap-button.rotating:active {
+  transform: rotate(180deg) scale(0.9);
 }
 
 /* Loader styling */
@@ -1381,4 +1397,221 @@ textarea.translate-textarea:focus {
   line-height: 1.4;
   margin-top: 4px;
   animation: fadeIn 0.2s ease;
+}
+
+/* ==========================================
+   PREMIUM UI/UX DESIGN SYSTEM UPGRADES
+   ========================================== */
+
+/* 5-Tab Full Width Optimization */
+.bt-tabs-inner {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 2px;
+}
+
+.bt-tab {
+  flex: 1;
+  text-align: center;
+  padding: 0.625rem 0.1rem;
+  font-size: 11.5px;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--bt-radius-small) var(--bt-radius-small) 0 0;
+}
+
+.bt-tab:hover {
+  background-color: var(--bt-color-background-hover);
+  color: var(--bt-color-text-default);
+}
+
+.bt-tab.active {
+  color: var(--bt-color-primary-background);
+  border-bottom-color: var(--bt-color-primary-background);
+}
+
+/* Sub-segmented navigation for History & Saved */
+.bt-sub-tabs {
+  display: flex;
+  background: var(--bt-color-background-subtle);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 4px;
+  border: 1px solid var(--bt-color-border-default);
+  margin-bottom: 0.75rem;
+}
+
+.bt-sub-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bt-color-text-muted);
+  cursor: pointer;
+  transition: all var(--bt-transition-duration) var(--bt-ease);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bt-sub-tab:hover {
+  color: var(--bt-color-text-default);
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.bt-sub-tab.active {
+  background: var(--bt-color-background-default);
+  color: var(--bt-color-primary-background);
+  box-shadow: var(--bt-shadow-sm);
+}
+
+body.dark .bt-sub-tab:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.bt-sub-panel {
+  display: none;
+  animation: slideDownIn var(--bt-transition-duration) var(--bt-ease);
+}
+
+.bt-sub-panel.active {
+  display: block;
+}
+
+/* Premium Card Glassmorphism override */
+.bt-card {
+  background: var(--bt-glass-background);
+  backdrop-filter: blur(var(--bt-glass-blur));
+  -webkit-backdrop-filter: blur(var(--bt-glass-blur));
+  border: 1px solid var(--bt-glass-border);
+  box-shadow: var(--bt-glass-shadow);
+  border-radius: 12px;
+  padding: 1.25rem;
+  transition:
+    transform var(--bt-transition-duration) var(--bt-ease),
+    border-color var(--bt-transition-duration) var(--bt-ease),
+    box-shadow var(--bt-transition-duration) var(--bt-ease);
+}
+
+.bt-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.15);
+  border-color: var(--bt-color-primary-border-hover);
+  background: var(--bt-glass-background);
+}
+
+body.dark .bt-card:hover {
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5);
+  border-color: var(--bt-color-primary-background);
+}
+
+/* Sun/Moon Theme Toggle Button */
+.bt-theme-toggle {
+  background: none;
+  border: none;
+  color: var(--bt-color-text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--bt-transition-duration) var(--bt-ease);
+  width: 28px;
+  height: 28px;
+}
+
+.bt-theme-toggle:hover {
+  background-color: var(--bt-color-background-hover);
+  color: var(--bt-color-text-default);
+  transform: scale(1.1);
+}
+
+body.dark .bt-theme-toggle .sun-icon {
+  display: none !important;
+}
+
+body.dark .bt-theme-toggle .moon-icon {
+  display: block !important;
+  color: #f1c40f;
+}
+
+body:not(.dark) .bt-theme-toggle .sun-icon {
+  display: block !important;
+  color: #f39c12;
+}
+
+body:not(.dark) .bt-theme-toggle .moon-icon {
+  display: none !important;
+}
+
+/* Dark mode inputs, selects, and textareas */
+body.dark input,
+body.dark textarea,
+body.dark select {
+  background-color: var(--bt-color-background-subtle) !important;
+  border-color: var(--bt-color-border-default) !important;
+  color: var(--bt-color-text-default) !important;
+}
+
+body.dark input:focus,
+body.dark textarea:focus,
+body.dark select:focus {
+  border-color: var(--bt-color-primary-background) !important;
+}
+
+body.dark .bt-translate-loader {
+  background: rgba(15, 23, 42, 0.7);
+}
+
+body.dark .bt-lang-toggle span[data-lang]:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+body.dark .bt-lang-toggle span.active {
+  color: var(--bt-color-primary-background);
+}
+
+/* Beautiful empty state panels */
+.bt-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: var(--bt-color-text-muted);
+  gap: 0.75rem;
+  background: var(--bt-color-background-subtle);
+  border: 1px dashed var(--bt-color-border-default);
+  border-radius: 12px;
+  margin-top: 0.5rem;
+}
+
+.bt-empty-svg {
+  color: var(--bt-color-text-muted);
+  opacity: 0.4;
+  animation: bt-pulse 2s infinite ease-in-out;
+}
+
+.bt-empty-text {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+@keyframes bt-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.06);
+  }
 }

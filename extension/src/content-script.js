@@ -245,6 +245,12 @@ void (async function bootstrap() {
             if (langSettingsChanged) {
               document.querySelectorAll(".bt-hover-translation").forEach((el) => el.remove());
             }
+
+            // Update Right-Click & Selection Unlocker status dynamically
+            if (newSettings && typeof newSettings.rightClickUnlockerEnabled !== "undefined") {
+              isUnlockerActive = newSettings.rightClickUnlockerEnabled === true;
+              applyRightClickUnlockerCSS(isUnlockerActive);
+            }
           }
         }
       });
@@ -261,6 +267,7 @@ void (async function bootstrap() {
     registerInstantLabelIndicator();
     registerHoverTranslate();
     // registerHoverToggleShortcut();
+    registerRightClickUnlocker();
 
     // Message listener for background script communications
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -1659,6 +1666,88 @@ async function toggleInstantDomainForCurrentUrl() {
   }
 }
 
+async function toggleHoverDomainForCurrentUrl() {
+  try {
+    const settings = await getSettings();
+
+    if (!settings.hoverTranslateDomains) {
+      settings.hoverTranslateDomains = [];
+    }
+
+    // Find matching domain
+    const matchingDomainIndex = findDomainIndexForCurrentLocation(settings.hoverTranslateDomains);
+
+    if (!settings.hoverTranslateEnabled) {
+      settings.hoverTranslateEnabled = true;
+
+      if (matchingDomainIndex !== -1) {
+        settings.hoverTranslateDomains[matchingDomainIndex].enabled = true;
+      }
+    } else if (matchingDomainIndex !== -1) {
+      settings.hoverTranslateDomains[matchingDomainIndex].enabled =
+        !settings.hoverTranslateDomains[matchingDomainIndex].enabled;
+    }
+
+    if (matchingDomainIndex === -1) {
+      const domain = extractDomainFromUrl(window.location.href);
+
+      settings.hoverTranslateDomains.push({
+        domain: domain,
+        enabled: true,
+      });
+
+      try {
+        await safeRuntimeCall(() =>
+          chrome.runtime.sendMessage({
+            type: "set-settings",
+            settings: settings,
+          }),
+        );
+      } catch (error) {
+        console.error("LinguaKit: Error saving settings:", error.message);
+        return;
+      }
+
+      // Show success toast
+      const enabledText = i18n.t("toast.hoverEnabled") || "🔍 Hover translate enabled";
+      const forText = i18n.t("toast.for") || "for";
+      showToastBottomRight(`${enabledText} ${forText} ${domain}`);
+      return;
+    }
+
+    const domain = settings.hoverTranslateDomains[matchingDomainIndex];
+
+    try {
+      await safeRuntimeCall(() =>
+        chrome.runtime.sendMessage({
+          type: "set-settings",
+          settings: settings,
+        }),
+      );
+    } catch (error) {
+      console.error("LinguaKit: Error updating settings:", error.message);
+      return;
+    }
+
+    const status = domain.enabled
+      ? i18n.t("toast.hoverEnabled") || "🔍 Hover translate enabled"
+      : i18n.t("toast.hoverDisabled") || "Hover translate disabled";
+
+    const forText = i18n.t("toast.for") || "for";
+    showToastBottomRight(`${status} ${forText} ${domain.domain}`);
+
+    // If disabled, clean up any active hover elements or states
+    if (!domain.enabled) {
+      clearAllHoverTranslations();
+      document.body.classList.remove("bt-hover-translate-active");
+      hoverModifierPressed = false;
+    }
+  } catch (err) {
+    console.error("Toggle hover domain error:", err);
+    showToast(i18n.t("toast.error") || "Error toggling hover domain");
+  }
+}
+
 function extractDomainFromUrl(url) {
   try {
     const urlObj = new URL(url);
@@ -2009,9 +2098,9 @@ function registerToggleShortcuts() {
       // Instant Translate Shortcut
       const instantShortcut = settings.instantToggleShortcut || {
         key: "I",
-        ctrl: true,
+        ctrl: false,
         shift: true,
-        alt: false,
+        alt: true,
       };
 
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
@@ -2033,9 +2122,9 @@ function registerToggleShortcuts() {
       // Auto Page Translate Shortcut
       const autoPageShortcut = settings.autoTranslateToggleShortcut || {
         key: "P",
-        ctrl: true,
+        ctrl: false,
         shift: true,
-        alt: false,
+        alt: true,
       };
 
       const autoPageMatches =
@@ -2048,6 +2137,27 @@ function registerToggleShortcuts() {
         e.preventDefault();
         e.stopPropagation();
         await toggleAutoPageTranslateDomainForCurrentUrl();
+        return;
+      }
+
+      // Hover Translate Shortcut
+      const hoverShortcut = settings.hoverToggleShortcut || {
+        key: "H",
+        ctrl: false,
+        shift: true,
+        alt: true,
+      };
+
+      const hoverMatches =
+        e.key.toUpperCase() === hoverShortcut.key.toUpperCase() &&
+        modifierKey === hoverShortcut.ctrl &&
+        e.shiftKey === hoverShortcut.shift &&
+        e.altKey === hoverShortcut.alt;
+
+      if (hoverMatches) {
+        e.preventDefault();
+        e.stopPropagation();
+        await toggleHoverDomainForCurrentUrl();
         return;
       }
     },
@@ -2530,6 +2640,14 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
       iconUrl = "";
     }
     popup.className = "bt-selection-popup bt-vars-container";
+    try {
+      const themeData = await chrome.storage.local.get("theme");
+      if (themeData && themeData.theme === "dark") {
+        popup.classList.add("dark");
+      }
+    } catch (err) {
+      console.error("LinguaKit: Error reading theme setting for selection popup:", err);
+    }
     popup.innerHTML = `
     <div class="bt-selection-header">
       <span class="bt-selection-title">
@@ -2584,14 +2702,6 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
         </div>
     </div>
     <div class="bt-selection-smart-actions">
-      <button class="bt-smart-btn" data-task="summarize" title="${i18n.t("selection.summarize")}">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h7"></path></svg>
-        <span>${i18n.t("selection.summarize")}</span>
-      </button>
-      <button class="bt-smart-btn" data-task="improve" title="${i18n.t("selection.improve")}">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-        <span>${i18n.t("selection.improve")}</span>
-      </button>
       <div class="bt-smart-dropdown">
         <button class="bt-smart-btn bt-tone-btn" title="${i18n.t("selection.tone")}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
@@ -2601,6 +2711,35 @@ async function showTranslationPopup(selectionRect, text, iconPosition) {
         <div class="bt-smart-dropdown-content">
           <button data-task="tone-professional">${i18n.t("selection.toneProfessional")}</button>
           <button data-task="tone-casual">${i18n.t("selection.toneCasual")}</button>
+        </div>
+      </div>
+      <div class="bt-smart-dropdown">
+        <button class="bt-smart-btn bt-tone-btn" title="${i18n.t("selection.tools")}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+          <span>${i18n.t("selection.tools")}</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="bt-smart-dropdown-content">
+          <button data-task="summarize">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h7"></path></svg>
+            <span>${i18n.t("selection.summarize")}</span>
+          </button>
+          <button data-task="improve">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            <span>${i18n.t("selection.improve")}</span>
+          </button>
+          <button data-task="explain">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span>${i18n.t("selection.explain")}</span>
+          </button>
+          <button data-task="correct">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>${i18n.t("selection.correct")}</span>
+          </button>
+          <button data-task="simplify">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A5 5 0 0 0 8 8c0 1 .3 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><line x1="9" y1="18" x2="15" y2="18"></line><line x1="10" y1="22" x2="14" y2="22"></line></svg>
+            <span>${i18n.t("selection.simplify")}</span>
+          </button>
         </div>
       </div>
     </div>
@@ -2934,6 +3073,12 @@ async function translateSelectionWithSource(
     translatedLabel.firstChild.textContent = i18n.t("selection.improved") + " ";
   } else if (task.startsWith("tone")) {
     translatedLabel.firstChild.textContent = i18n.t("selection.rewritten") + " ";
+  } else if (task === "explain") {
+    translatedLabel.firstChild.textContent = i18n.t("selection.explanation") + " ";
+  } else if (task === "correct") {
+    translatedLabel.firstChild.textContent = i18n.t("selection.corrected") + " ";
+  } else if (task === "simplify") {
+    translatedLabel.firstChild.textContent = i18n.t("selection.simplified") + " ";
   } else {
     translatedLabel.firstChild.textContent = i18n.t("selection.translate") + " ";
   }
@@ -3982,4 +4127,66 @@ function startOcrCrop(screenshotUrl) {
     document.addEventListener("keydown", onKeyDown, true);
   });
   img.src = screenshotUrl;
+}
+
+let isUnlockerActive = false;
+let unlockerStyleElement = null;
+
+/**
+ * Manages global CSS overrides to defeat visual user-selection locks.
+ *
+ * @function applyRightClickUnlockerCSS
+ * @param {boolean} enabled - True to apply CSS override, false to remove.
+ * @returns {void}
+ */
+function applyRightClickUnlockerCSS(enabled) {
+  if (enabled) {
+    if (!unlockerStyleElement) {
+      unlockerStyleElement = document.createElement("style");
+      unlockerStyleElement.id = "linguakit-unlocker-style";
+      unlockerStyleElement.textContent = `
+        * {
+          user-select: text !important;
+          -webkit-user-select: text !important;
+          -moz-user-select: text !important;
+          -ms-user-select: text !important;
+        }
+      `;
+      (document.head || document.documentElement).appendChild(unlockerStyleElement);
+    }
+  } else {
+    if (unlockerStyleElement) {
+      unlockerStyleElement.remove();
+      unlockerStyleElement = null;
+    }
+  }
+}
+
+/**
+ * Bypasses right-click blocking and selection locks during the event capturing phase.
+ *
+ * @function registerRightClickUnlocker
+ * @returns {void}
+ */
+function registerRightClickUnlocker() {
+  const lockEvents = ["contextmenu", "selectstart", "dragstart", "copy"];
+
+  lockEvents.forEach((eventType) => {
+    window.addEventListener(
+      eventType,
+      (e) => {
+        if (!isUnlockerActive) return;
+
+        // Stop the webpage event listeners from receiving the event during capture phase
+        e.stopPropagation();
+      },
+      true, // Capturing phase
+    );
+  });
+
+  // Query settings initially
+  void getSettings().then((settings) => {
+    isUnlockerActive = settings.rightClickUnlockerEnabled === true;
+    applyRightClickUnlockerCSS(isUnlockerActive);
+  });
 }

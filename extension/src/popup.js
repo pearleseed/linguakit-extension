@@ -16,6 +16,7 @@ const targetSelect = document.querySelector("#target");
 
 const autoDetect = document.querySelector("#auto-detect");
 const confirmModal = document.querySelector("#confirm-modal");
+const rightClickUnlockerCheckbox = document.querySelector("#right-click-unlocker-enabled");
 const saveBtn = document.querySelector("#save");
 const aliasListEl = document.querySelector("#alias-list");
 const aliasKeyInput = document.querySelector("#alias-key");
@@ -36,6 +37,8 @@ const addDomainBtn = document.querySelector("#add-domain");
 
 // Auto Page Translate elements
 const autoPageEnabledCheckbox = document.querySelector("#auto-page-enabled");
+const useGoogleProxyCheckbox = document.querySelector("#use-google-proxy");
+const btnTestGoogleProxy = document.querySelector("#btn-test-google-proxy");
 const autoPageSettings = document.querySelector("#auto-page-settings");
 const autoPageDomainListEl = document.querySelector("#auto-page-domain-list");
 const newAutoPageDomainInput = document.querySelector("#new-auto-page-domain");
@@ -66,6 +69,7 @@ const formType = document.querySelector("#form-type");
 const formName = document.querySelector("#form-name");
 const formDynamicFields = document.querySelector("#form-dynamic-fields");
 const btnFormCancel = document.querySelector("#form-cancel");
+const btnFormTest = document.querySelector("#form-test");
 const btnFormSave = document.querySelector("#form-save");
 
 // Prompt customization elements
@@ -257,7 +261,15 @@ function renderAliases() {
 function renderHistoryList(history) {
   if (!historyListEl) return;
   if (!history || history.length === 0) {
-    historyListEl.innerHTML = `<div class="bt-empty-state">${i18n.t("popup.noHistory")}</div>`;
+    historyListEl.innerHTML = `
+      <div class="bt-empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="bt-empty-svg">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <div class="bt-empty-text">${i18n.t("popup.noHistory")}</div>
+      </div>
+    `;
     return;
   }
 
@@ -349,7 +361,14 @@ async function loadHistory() {
 function renderFavoritesList(favorites) {
   if (!favoritesListEl) return;
   if (!favorites || favorites.length === 0) {
-    favoritesListEl.innerHTML = `<div class="bt-empty-state">${i18n.t("popup.noFavorites")}</div>`;
+    favoritesListEl.innerHTML = `
+      <div class="bt-empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="bt-empty-svg">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <div class="bt-empty-text">${i18n.t("popup.noFavorites")}</div>
+      </div>
+    `;
     return;
   }
 
@@ -741,6 +760,78 @@ function saveProviderFromForm() {
 btnAddProvider.addEventListener("click", () => openProviderForm(null));
 btnFormCancel.addEventListener("click", closeProviderForm);
 btnFormSave.addEventListener("click", saveProviderFromForm);
+
+btnFormTest.addEventListener("click", () => {
+  const type = formType.value;
+  const config = {};
+
+  const apiKeyEl = document.querySelector("#field-apiKey");
+  if (apiKeyEl) config.apiKey = apiKeyEl.value.trim();
+
+  const modelEl = document.querySelector("#field-model");
+  if (modelEl) config.model = modelEl.value ? modelEl.value.trim() : "";
+
+  const baseUrlEl = document.querySelector("#field-baseUrl");
+  if (baseUrlEl) config.baseUrl = baseUrlEl.value ? baseUrlEl.value.trim() : "";
+
+  const usernameEl = document.querySelector("#field-username");
+  if (usernameEl) config.username = usernameEl.value ? usernameEl.value.trim() : "";
+
+  const passwordEl = document.querySelector("#field-password");
+  if (passwordEl) config.password = passwordEl.value ? passwordEl.value.trim() : "";
+
+  // Validation check before running test
+  let hasError = false;
+  if (type === "openai") {
+    const required = [
+      { id: "field-baseUrl", val: config.baseUrl },
+      { id: "field-model", val: config.model },
+      { id: "field-username", val: config.username },
+      { id: "field-password", val: config.password },
+    ];
+
+    required.forEach((f) => {
+      const el = document.getElementById(f.id);
+      if (!f.val && el) {
+        el.classList.add("error");
+        hasError = true;
+      }
+    });
+  }
+
+  if (hasError) {
+    showToast(i18n.t("popup.fillRequired") || "Please fill in all required fields", "error");
+    return;
+  }
+
+  const originalText = btnFormTest.textContent;
+  btnFormTest.disabled = true;
+  btnFormTest.textContent = i18n.t("toast.testingConnection") || "Testing connection...";
+
+  chrome.runtime.sendMessage(
+    {
+      type: "test-provider",
+      providerType: type,
+      config: config,
+    },
+    (response) => {
+      btnFormTest.disabled = false;
+      btnFormTest.textContent = originalText;
+
+      if (response && response.ok) {
+        const successMsg =
+          (i18n.t("toast.testSuccess") || "Connection successful!") + ` (Hello -> ${response.translation})`;
+        showToast(successMsg, "success");
+      } else {
+        const errorMsg =
+          (i18n.t("toast.testFailed") || "Connection failed") +
+          (response ? `: ${response.error}` : ": Timeout or no response");
+        showToast(errorMsg, "error");
+      }
+    },
+  );
+});
+
 formType.addEventListener("change", () => renderFormFields(formType.value));
 
 // ============================================
@@ -1003,6 +1094,9 @@ async function loadSettings() {
     syncLanguageElements(res.settings);
 
     confirmModal.checked = res.settings.showConfirmModal !== false;
+    if (rightClickUnlockerCheckbox) {
+      rightClickUnlockerCheckbox.checked = res.settings.rightClickUnlockerEnabled || false;
+    }
     if (ocrEnabledCheckbox) {
       ocrEnabledCheckbox.checked = res.settings.ocrEnabled !== false;
     }
@@ -1024,6 +1118,9 @@ async function loadSettings() {
 
     if (autoPageEnabledCheckbox) {
       autoPageEnabledCheckbox.checked = res.settings.autoPageTranslateEnabled || false;
+    }
+    if (useGoogleProxyCheckbox) {
+      useGoogleProxyCheckbox.checked = res.settings.useGoogleTranslateProxy || false;
     }
     currentAutoPageDomains = res.settings.autoPageTranslateDomains || [];
 
@@ -1056,9 +1153,9 @@ async function loadSettings() {
     // Load Keyboard Shortcut
     const shortcut = res.settings.instantToggleShortcut || {
       key: "I",
-      ctrl: true,
+      ctrl: false,
       shift: true,
-      alt: false,
+      alt: true,
     };
     if (shortcutCtrlCheckbox) shortcutCtrlCheckbox.checked = shortcut.ctrl;
     if (shortcutShiftCheckbox) shortcutShiftCheckbox.checked = shortcut.shift;
@@ -1069,9 +1166,9 @@ async function loadSettings() {
     // Load Auto Page Translate Shortcut
     const autoPageShortcut = res.settings.autoTranslateToggleShortcut || {
       key: "P",
-      ctrl: true,
+      ctrl: false,
       shift: true,
-      alt: false,
+      alt: true,
     };
     if (autoPageShortcutCtrlCheckbox) autoPageShortcutCtrlCheckbox.checked = autoPageShortcut.ctrl;
     if (autoPageShortcutShiftCheckbox) autoPageShortcutShiftCheckbox.checked = autoPageShortcut.shift;
@@ -1090,9 +1187,9 @@ async function loadSettings() {
     // Load hover toggle shortcut
     const hoverShortcut = res.settings.hoverToggleShortcut || {
       key: "H",
-      ctrl: true,
+      ctrl: false,
       shift: true,
-      alt: false,
+      alt: true,
     };
     hoverShortcutCtrl.checked = hoverShortcut.ctrl;
     hoverShortcutShift.checked = hoverShortcut.shift;
@@ -1123,6 +1220,9 @@ async function loadSettings() {
       useAutoDetect: false,
     });
     confirmModal.checked = true;
+    if (rightClickUnlockerCheckbox) {
+      rightClickUnlockerCheckbox.checked = false;
+    }
     currentAliases = {};
 
     updateLangToggleUI("en");
@@ -1135,6 +1235,7 @@ async function loadSettings() {
     currentDomains = [];
 
     if (autoPageEnabledCheckbox) autoPageEnabledCheckbox.checked = false;
+    if (useGoogleProxyCheckbox) useGoogleProxyCheckbox.checked = false;
     currentAutoPageDomains = [];
 
     providers = [
@@ -1162,17 +1263,23 @@ async function loadSettings() {
     }
 
     // Default keyboard shortcut
-    if (shortcutCtrlCheckbox) shortcutCtrlCheckbox.checked = true;
+    if (shortcutCtrlCheckbox) shortcutCtrlCheckbox.checked = false;
     if (shortcutShiftCheckbox) shortcutShiftCheckbox.checked = true;
-    if (shortcutAltCheckbox) shortcutAltCheckbox.checked = false;
+    if (shortcutAltCheckbox) shortcutAltCheckbox.checked = true;
     if (shortcutKeyInput) shortcutKeyInput.value = "I";
     updateShortcutPreview();
 
-    if (autoPageShortcutCtrlCheckbox) autoPageShortcutCtrlCheckbox.checked = true;
+    if (autoPageShortcutCtrlCheckbox) autoPageShortcutCtrlCheckbox.checked = false;
     if (autoPageShortcutShiftCheckbox) autoPageShortcutShiftCheckbox.checked = true;
-    if (autoPageShortcutAltCheckbox) autoPageShortcutAltCheckbox.checked = false;
+    if (autoPageShortcutAltCheckbox) autoPageShortcutAltCheckbox.checked = true;
     if (autoPageShortcutKeyInput) autoPageShortcutKeyInput.value = "P";
     updateAutoPageShortcutPreview();
+
+    if (hoverShortcutCtrl) hoverShortcutCtrl.checked = false;
+    if (hoverShortcutShift) hoverShortcutShift.checked = true;
+    if (hoverShortcutAlt) hoverShortcutAlt.checked = true;
+    if (hoverShortcutKey) hoverShortcutKey.value = "H";
+    updateHoverShortcutPreview();
   }
 
   renderAliases();
@@ -1201,6 +1308,7 @@ async function saveSettings() {
     targetLanguageCode: targetSelect.value,
     useAutoDetect: autoDetect.checked,
     showConfirmModal: confirmModal.checked,
+    rightClickUnlockerEnabled: rightClickUnlockerCheckbox ? rightClickUnlockerCheckbox.checked : false,
     ocrEnabled: ocrEnabledCheckbox ? ocrEnabledCheckbox.checked : true,
     aliases: currentAliases,
     interfaceLanguage: document.querySelector("#lang-toggle .active").getAttribute("data-lang"),
@@ -1224,6 +1332,7 @@ async function saveSettings() {
     },
     // Auto Page Translate settings
     autoPageTranslateEnabled: autoPageEnabledCheckbox?.checked || false,
+    useGoogleTranslateProxy: useGoogleProxyCheckbox?.checked || false,
     autoPageTranslateDomains: currentAutoPageDomains,
     autoTranslateToggleShortcut: {
       key: autoPageShortcutKeyInput?.value.toUpperCase() || "P",
@@ -1299,6 +1408,9 @@ autoDetect.addEventListener("change", () => {
   void updateGlobalLanguageSettings({ useAutoDetect: autoDetect.checked });
 });
 confirmModal.addEventListener("change", saveSettings);
+if (rightClickUnlockerCheckbox) {
+  rightClickUnlockerCheckbox.addEventListener("change", saveSettings);
+}
 
 const langToggle = document.querySelector("#lang-toggle");
 
@@ -1359,6 +1471,42 @@ if (autoPageEnabledCheckbox) {
   autoPageEnabledCheckbox.addEventListener("change", () => {
     toggleAutoPageSettings();
     void saveSettings();
+  });
+}
+
+if (useGoogleProxyCheckbox) {
+  useGoogleProxyCheckbox.addEventListener("change", () => {
+    void saveSettings();
+  });
+}
+
+if (btnTestGoogleProxy) {
+  btnTestGoogleProxy.addEventListener("click", () => {
+    const originalText = btnTestGoogleProxy.textContent;
+    btnTestGoogleProxy.disabled = true;
+    btnTestGoogleProxy.textContent = i18n.t("toast.testingConnection") || "Testing connection...";
+
+    chrome.runtime.sendMessage(
+      {
+        type: "test-google-proxy",
+        useProxy: useGoogleProxyCheckbox?.checked || false,
+      },
+      (response) => {
+        btnTestGoogleProxy.disabled = false;
+        btnTestGoogleProxy.textContent = originalText;
+
+        if (response && response.ok) {
+          const successMsg =
+            (i18n.t("toast.testSuccess") || "Connection successful!") + ` (Hello -> ${response.translation})`;
+          showToast(successMsg, "success");
+        } else {
+          const errorMsg =
+            (i18n.t("toast.testFailed") || "Connection failed") +
+            (response ? `: ${response.error}` : ": Timeout or no response");
+          showToast(errorMsg, "error");
+        }
+      },
+    );
   });
 }
 
@@ -1458,7 +1606,6 @@ document.querySelectorAll(".bt-tab").forEach((tab) => {
     const contentEl = document.getElementById(contentId);
     if (contentEl) contentEl.classList.add("active");
 
-    // tab.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     // Targeted scroll for the tabs container only to prevent horizontal UI shift
     const tabsContainer = document.querySelector(".bt-tabs");
     if (tabsContainer) {
@@ -1475,8 +1622,8 @@ document.querySelectorAll(".bt-tab").forEach((tab) => {
     const wrap = document.querySelector(".bt-wrap");
     if (wrap) wrap.scrollLeft = 0;
 
-    // Hide save button on help and translate tabs
-    if (tab.dataset.tab === "help" || tab.dataset.tab === "translate") {
+    // Hide save button on translate and history tabs
+    if (tab.dataset.tab === "translate" || tab.dataset.tab === "history") {
       saveBtn.style.display = "none";
     } else {
       // Only show if not in provider form
@@ -1485,11 +1632,33 @@ document.querySelectorAll(".bt-tab").forEach((tab) => {
       }
     }
 
-    if (tab.dataset.tab === "auto-page") {
+    if (tab.dataset.tab === "tools") {
       void updateExportButtonStatus();
     }
   });
 });
+
+// Segment/sub-tab listeners for History and Saved
+const btnSubHistory = document.querySelector("#btn-sub-history");
+const btnSubFavorites = document.querySelector("#btn-sub-favorites");
+const panelHistory = document.querySelector("#panel-history");
+const panelFavorites = document.querySelector("#panel-favorites");
+
+if (btnSubHistory && btnSubFavorites && panelHistory && panelFavorites) {
+  btnSubHistory.addEventListener("click", () => {
+    btnSubHistory.classList.add("active");
+    btnSubFavorites.classList.remove("active");
+    panelHistory.style.display = "block";
+    panelFavorites.style.display = "none";
+  });
+
+  btnSubFavorites.addEventListener("click", () => {
+    btnSubFavorites.classList.add("active");
+    btnSubHistory.classList.remove("active");
+    panelFavorites.style.display = "block";
+    panelHistory.style.display = "none";
+  });
+}
 
 saveBtn.addEventListener("click", saveSettings);
 
@@ -1766,9 +1935,31 @@ if (importFileInput) {
   });
 }
 
+// Theme Selector logic and initialization
+async function initTheme() {
+  const themeToggle = document.querySelector("#theme-toggle");
+  if (!themeToggle) return;
+
+  const data = await chrome.storage.local.get("theme");
+  const currentTheme = data.theme || "light";
+
+  if (currentTheme === "dark") {
+    document.body.classList.add("dark");
+  } else {
+    document.body.classList.remove("dark");
+  }
+
+  themeToggle.addEventListener("click", async () => {
+    const isDark = document.body.classList.toggle("dark");
+    const nextTheme = isDark ? "dark" : "light";
+    await chrome.storage.local.set({ theme: nextTheme });
+  });
+}
+
 void loadSettings();
 displayVersion();
 void loadHistory();
+void initTheme();
 
 async function updateExportButtonStatus() {
   if (!btnExportJson) return;
@@ -1945,6 +2136,17 @@ function playTranslationTTS() {
  */
 function swapLanguages() {
   if (!translateSourceLang || !translateTargetLang || !translateSourceText || !translateTargetText) return;
+
+  if (translateSwapBtn) {
+    translateSwapBtn.classList.add("rotating");
+    translateSwapBtn.addEventListener(
+      "transitionend",
+      () => {
+        translateSwapBtn.classList.remove("rotating");
+      },
+      { once: true },
+    );
+  }
 
   let src = translateSourceLang.value;
   let dst = translateTargetLang.value;
