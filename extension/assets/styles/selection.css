@@ -42,17 +42,12 @@
   width: max-content;
   min-height: 150px;
   max-height: min(70vh, calc(100vh - 40px));
-  background: #ffffff; /* Fallback for when CSS variables are blocked/missing */
-  background: var(--bt-glass-background);
-  backdrop-filter: var(--bt-glass-blur);
-  -webkit-backdrop-filter: var(--bt-glass-blur);
-  border: 1px solid #e2e8f0; /* Fallback border */
-  border: 1px solid var(--bt-glass-border);
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid var(--bt-color-border-default) !important;
   border-radius: var(--bt-radius-small);
-  box-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -4px rgba(0, 0, 0, 0.1); /* Fallback shadow */
-  box-shadow: var(--bt-glass-shadow);
+  box-shadow: var(--bt-shadow-lg) !important;
   font-family:
     system-ui,
     -apple-system,
@@ -621,10 +616,21 @@
 /* Automatically apply dark mode styling based on system preferences or explicit .dark class */
 @media (prefers-color-scheme: dark) {
   .bt-selection-popup {
-    background: var(--bt-glass-background);
-    border-color: var(--bt-glass-border);
-    box-shadow: var(--bt-glass-shadow);
+    background: var(--bt-color-background-default) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: var(--bt-color-border-default) !important;
+    box-shadow: var(--bt-shadow-lg) !important;
     color: var(--bt-color-text-default);
+  }
+
+  /* Solid arrow adjustments in dark mode to match background */
+  .bt-popup-bottom::after {
+    border-color: transparent transparent var(--bt-color-background-default) transparent !important;
+  }
+
+  .bt-popup-top::after {
+    border-color: var(--bt-color-background-default) transparent transparent transparent !important;
   }
 
   .bt-selection-title {
@@ -674,10 +680,20 @@
 
 /* Explicit class-based overrides in case the host site is in dark mode or popup explicitly has dark mode */
 .bt-selection-popup.dark {
-  background: var(--bt-glass-background);
-  border-color: var(--bt-glass-border);
-  box-shadow: var(--bt-glass-shadow);
+  background: var(--bt-color-background-default) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: var(--bt-color-border-default) !important;
+  box-shadow: var(--bt-shadow-lg) !important;
   color: var(--bt-color-text-default);
+}
+
+.bt-selection-popup.dark.bt-popup-bottom::after {
+  border-color: transparent transparent var(--bt-color-background-default) transparent !important;
+}
+
+.bt-selection-popup.dark.bt-popup-top::after {
+  border-color: var(--bt-color-background-default) transparent transparent transparent !important;
 }
 
 .bt-selection-popup.dark .bt-selection-title {
